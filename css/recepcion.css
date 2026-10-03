@@ -171,6 +171,7 @@
 .reloj__hora { font-family: var(--f-titulo); font-weight: var(--peso-titulo); font-size: clamp(1.75rem, 5vw, 2.75rem); line-height: 1.05; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .reloj__fecha { font-size: 1.0625rem; color: var(--tinta-2); font-weight: 600; }
 .reloj__botones { display: flex; flex-wrap: wrap; gap: 8px; }
+.reloj__botones .boton { white-space: nowrap; }
 .reloj__nota { font-size: 0.875rem; color: var(--tinta-3); }
 
 .riel { position: relative; height: 120px; margin: 4px 0 0; }

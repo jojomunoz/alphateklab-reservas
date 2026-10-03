@@ -69,10 +69,12 @@
   --velo-c: rgba(20, 38, 43, 0.45); --velo-o: rgba(0, 0, 0, 0.6);
 
   /* Barra de la demo: es de alphateklab, no del cliente; igual en todas las marcas. */
-  --demo-fondo: #1b2124;
+  --demo-fondo: #202729;     /* grafito de alphateklab */
   --demo-tinta: #eef2f2;
   --demo-tinta-2: #b7c2c4;
-  --demo-linea: #3a4549;
+  --demo-linea: #3d4749;
+  --demo-senal: #f2b544;     /* ámbar de alphateklab: la vista actual y el foco */
+  --demo-hueco: #2b3436;
 
   /* Movimiento (guía §6.3): solo responder y mostrar estado. */
   --dur-respuesta: 120ms;
@@ -291,21 +293,24 @@ legend { padding: 0; }
 .barra-demo { background: var(--demo-fondo); color: var(--demo-tinta); font-size: 0.875rem; min-height: 48px; }
 .barra-demo a { color: var(--demo-tinta); }
 .barra-demo__dentro { max-width: var(--ancho); margin: 0 auto; padding: 0 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; }
-.barra-demo__titulo { min-height: 48px; display: flex; align-items: center; gap: 6px; margin-right: auto; }
+.barra-demo__titulo { min-height: 48px; display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; margin-right: auto; padding: 2px 0; }
+.barra-demo__titulo span { white-space: nowrap; }
 .barra-demo__titulo strong { font-weight: 700; }
+.barra-demo__logo { display: inline-flex; align-items: center; min-height: 44px; margin-right: 2px; border-radius: var(--r-control); }
+.barra-demo__logo img { display: block; height: 22px; width: auto; }
 .barra-demo__titulo span { color: var(--demo-tinta-2); }
 .barra-demo__menu { display: none; }
 .barra-demo__mas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 6px 0; }
 .barra-demo label { display: inline-flex; align-items: center; gap: 6px; color: var(--demo-tinta-2); }
-.barra-demo select { min-height: 36px; width: auto; padding: 4px 8px; background: #263034; border-color: var(--demo-linea); color: var(--demo-tinta); }
+.barra-demo select { min-height: 36px; width: auto; padding: 4px 8px; background: var(--demo-hueco); border-color: var(--demo-linea); color: var(--demo-tinta); }
 .barra-demo nav { display: flex; flex-wrap: wrap; gap: 0 2px; }
 .barra-demo nav a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 8px; text-decoration: none; border-radius: var(--r-control); color: var(--demo-tinta-2); }
-.barra-demo nav a[aria-current="page"] { color: var(--demo-tinta); box-shadow: inset 0 -2px 0 #ffc72c; }
+.barra-demo nav a[aria-current="page"] { color: var(--demo-tinta); box-shadow: inset 0 -2px 0 var(--demo-senal); }
 .barra-demo .boton { min-height: 36px; background: transparent; border-color: var(--demo-linea); color: var(--demo-tinta); font-size: 0.875rem; padding: 0 12px; }
-.barra-demo :focus-visible { outline-color: #8bbcff; }
+.barra-demo :focus-visible { outline-color: var(--demo-senal); }
 @media (hover: hover) and (pointer: fine) {
-  .barra-demo nav a:hover { color: var(--demo-tinta); background: #263034; }
-  .barra-demo .boton:hover { background: #263034; border-color: #59666b; }
+  .barra-demo nav a:hover { color: var(--demo-tinta); background: var(--demo-hueco); }
+  .barra-demo .boton:hover { background: var(--demo-hueco); border-color: #59666b; }
 }
 @media (max-width: 899px) {
   .barra-demo__menu { display: inline-flex; min-height: 44px; }
@@ -382,6 +387,13 @@ legend { padding: 0; }
 .tabla th { text-align: left; font-size: 0.8125rem; color: var(--tinta-3); font-weight: 650; padding: 8px 10px; border-bottom: 1px solid var(--linea-fuerte); }
 .tabla td { padding: 10px; border-bottom: 1px solid var(--linea); vertical-align: top; }
 .tabla .der { text-align: right; }
+/* En el teléfono, una tabla ancha se lee como fichas: cada fila en bloque y cada celda con su encabezado. */
+@media (max-width: 599px) {
+  .tabla--apilable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .tabla--apilable tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 12px; border-bottom: 1px solid var(--linea); }
+  .tabla--apilable td { display: block; padding: 0; border: 0; }
+  .tabla--apilable td::before { content: attr(data-etiqueta); display: block; font-size: 0.75rem; font-weight: 650; color: var(--tinta-3); }
+}
 
 .filas { list-style: none; margin: 0; padding: 0; }
 .filas > li { border-bottom: 1px solid var(--linea); }

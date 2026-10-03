@@ -21,7 +21,10 @@ const ctx = { plantilla: () => plantilla, alCambiar: (fn) => alCambiar(fn) };
 let recien = new Set();
 let bitacoraVista = 0;
 
-const RIEL_HORAS = 72;
+// 72 h en pantallas anchas; 48 h en el teléfono, para que las marcas de 4 en 4 horas no se encimen.
+const angosto = matchMedia('(max-width: 599px)');
+const rielHoras = () => (angosto.matches ? 48 : 72);
+angosto.addEventListener?.('change', () => pintarReloj($('#reloj')));
 
 // ── Encabezado ────────────────────────────────────────────────────────
 
@@ -40,10 +43,10 @@ function pintarCabeza() {
 
 function htmlRiel(st, ahora) {
   const desde = inicioDelDia(ahora);
-  const hasta = desde + RIEL_HORAS * HORA;
+  const hasta = desde + rielHoras() * HORA;
   const x = (ms) => ((ms - desde) / (hasta - desde)) * 100;
   let html = '<div class="riel__pista"></div>';
-  for (let d = 0; d < RIEL_HORAS / 24; d++) {
+  for (let d = 0; d < rielHoras() / 24; d++) {
     const dia = sumarDias(fechaISO(desde), d);
     const a = msDeFecha(dia, VENTANA[0]), b = msDeFecha(dia, VENTANA[1]);
     html += `<div class="riel__ventana" style="left:${x(a)}%;width:${x(b) - x(a)}%"></div>`;
@@ -70,7 +73,7 @@ function htmlRiel(st, ahora) {
 function pintarReloj(cont) {
   const { negocio, st, ahora } = datos(ctx);
   const prox = proximoEnvio(st.envios, ahora);
-  const desde = inicioDelDia(ahora), hasta = desde + RIEL_HORAS * HORA;
+  const desde = inicioDelDia(ahora), hasta = desde + rielHoras() * HORA;
   const enRango = st.envios.filter((e) => e.momento >= desde && e.momento < hasta);
   const cola = enRango.filter((e) => e.estado === 'programado').length;
   const salidos = enRango.filter((e) => e.estado === 'enviado').length;
