@@ -1,9 +1,8 @@
 // Mensajes que viajan entre dispositivos (por ntfy) o entre pestañas, y cómo se aplican al estado.
 // Lo que llega de fuera no es de fiar: se valida la forma antes de tocar nada, y todo es idempotente por id.
 
-import { NEGOCIOS_CITAS } from './negocios.mjs';
-import { responder, aceptarOferta, registrarPaciente, crearCita, pacienteDe } from './operaciones.mjs';
-import { validarCedula, normalizarTelefono } from './contacto.mjs';
+import { negocioCitas } from './negocios.mjs';
+import { responder, aceptarOferta, solicitarCita, pacienteDe } from './operaciones.mjs';
 
 const ID = /^[a-z0-9_]{3,40}$/i;
 const TIPOS_RESPUESTA = new Set(['confirmo', 'cancelo', 'cambio', 'llamenme']);
@@ -24,8 +23,8 @@ export function mensajeSolicitud({ id, pl, cita, paciente }) {
  * Aplica un mensaje al estado completo de la demo. Devuelve { ok, resultado, aviso } con un texto para recepción.
  */
 export function aplicarMensaje(estado, m) {
-  if (!m || m.v !== 1 || !ID.test(m.id || '') || !NEGOCIOS_CITAS[m.pl]) return { ok: false, resultado: 'forma' };
-  const negocio = NEGOCIOS_CITAS[m.pl];
+  const negocio = m ? negocioCitas(m.pl) : null;
+  if (!m || m.v !== 1 || !ID.test(m.id || '') || !negocio) return { ok: false, resultado: 'forma' };
   const st = estado.negocios[m.pl];
   const ahora = estado.reloj.ahora;
 
@@ -57,19 +56,15 @@ export function aplicarMensaje(estado, m) {
     if (!Number.isInteger(c.inicio) || typeof c.servicioId !== 'string' || typeof p.nombre !== 'string') return { ok: false, resultado: 'forma' };
     if (st.procesados.includes(m.id)) return { ok: true, resultado: 'repetida' };
     st.procesados.push(m.id);
-    const ced = validarCedula(p.cedula), tel = normalizarTelefono(p.telefono);
-    let paciente = ced.ok && tel.ok ? st.pacientes.find((x) => x.cedula === ced.valor && x.telefono === tel.e164) : null;
-    if (!paciente) {
-      const rp = registrarPaciente(st, negocio, { ...p, consentimiento: p.consentimiento === true, canalConsentimiento: 'en la página de citas' }, ahora);
-      if (!rp.ok) return { ok: false, resultado: 'datos', errores: rp.errores };
-      paciente = rp.paciente;
+    const r = solicitarCita(st, negocio, {
+      persona: { nombre: p.nombre, cedula: p.cedula, telefono: p.telefono, correo: p.correo, consentimiento: p.consentimiento === true },
+      servicioId: c.servicioId, profesionalId: c.profesionalId || null, inicio: c.inicio * 60000,
+    }, ahora);
+    if (!r.ok) {
+      st.bitacora.unshift({ t: ahora, texto: `Llegó una solicitud de cita desde otro teléfono que no se pudo agendar: ${r.errores.map((e) => e.mensaje).join(' ')}`, tipo: 'respuesta' });
+      return { ok: true, resultado: 'rechazada', aviso: 'Llegó una solicitud desde otro teléfono para un horario que ya no está libre.' };
     }
-    const estadoInicial = st.ajustes.autoConfirmar ? 'confirmada' : 'pendiente';
-    const r = crearCita(st, negocio, {
-      pacienteId: paciente.id, servicioId: c.servicioId, profesionalId: c.profesionalId || null, salaId: null,
-      inicio: c.inicio * 60000, estado: estadoInicial,
-    }, ahora, { origen: 'autoagenda' });
-    return { ...r, resultado: r.ok ? 'creada' : 'choque', aviso: r.ok ? `${paciente.nombre} pidió una cita desde la página.` : `Llegó una solicitud de ${paciente.nombre} para un horario que ya no está libre.` };
+    return { ok: true, resultado: 'creada', cita: r.cita, aviso: `${r.paciente.nombre} pidió una cita desde la página.` };
   }
   return { ok: false, resultado: 'forma' };
 }

@@ -168,3 +168,8 @@ export function textoConsentimiento(negocio) {
     : '';
   return `Autorizo a ${negocio.nombre} a guardar mis datos de contacto y los de mis citas, y a escribirme por WhatsApp, SMS o correo sobre ellas, según la Ley 81 de 2019 de protección de datos personales.${datosSalud} Puedo retirar este permiso cuando quiera.`;
 }
+
+/** El negocio de citas con ese id, o null. Con Object.hasOwn: «__proto__» o «constructor» no son negocios. */
+export function negocioCitas(id) {
+  return typeof id === 'string' && Object.hasOwn(NEGOCIOS_CITAS, id) ? NEGOCIOS_CITAS[id] : null;
+}

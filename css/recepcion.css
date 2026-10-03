@@ -102,10 +102,6 @@
 @media (pointer: coarse) { .fila-recepcion .acciones .boton { min-height: 44px; } }
 
 /* ── Diálogos de cita, paciente, registro ───────────────────────────── */
-.datos { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 0.9375rem; }
-.datos dt { color: var(--tinta-3); font-size: 0.875rem; }
-.datos dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-@media (max-width: 420px) { .datos { grid-template-columns: 1fr; gap: 0 0; } .datos dd { margin-bottom: 8px; } }
 .bloque-dialogo + .bloque-dialogo { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--linea); }
 .bloque-dialogo h3 { font-size: 1rem; margin-bottom: 8px; }
 .formulario { display: grid; gap: 14px; }
@@ -125,16 +121,6 @@
 .elegido { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--primario-suave); }
 .elegido strong { display: block; }
 .elegido small { color: var(--tinta-2); }
-
-.horas { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
-.horas input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.horas label { display: flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); font-weight: 650; font-size: 0.875rem; cursor: pointer; font-variant-numeric: tabular-nums; background: var(--superficie); }
-.horas input:checked + label { background: var(--primario); border-color: var(--primario); color: var(--sobre-primario); }
-.horas input:focus-visible + label { outline: 2px solid var(--foco); outline-offset: 2px; }
-@media (hover: hover) and (pointer: fine) { .horas label:hover { border-color: var(--primario); } }
-.horas__grupo + .horas__grupo { margin-top: 10px; }
-.horas__titulo { font-size: 0.8125rem; color: var(--tinta-3); font-weight: 650; margin-bottom: 6px; }
-.sin-horas { background: var(--superficie-2); padding: 12px 14px; font-size: 0.9375rem; color: var(--tinta-2); display: grid; gap: 8px; justify-items: start; }
 
 .regla { display: grid; gap: 12px; border: 1px solid var(--linea); padding: 12px 14px; }
 .regla legend { font-weight: 700; font-size: 0.9375rem; padding: 0 4px; }
@@ -187,16 +173,17 @@
 .reloj__botones { display: flex; flex-wrap: wrap; gap: 8px; }
 .reloj__nota { font-size: 0.875rem; color: var(--tinta-3); }
 
-.riel { position: relative; height: 112px; margin: 4px 0 0; }
+.riel { position: relative; height: 120px; margin: 4px 0 0; }
 .riel__pista { position: absolute; left: 0; right: 0; top: 40px; height: 30px; background: var(--superficie-2); }
 .riel__ventana { position: absolute; top: 40px; height: 30px; background: var(--primario-suave); border-left: 1px solid color-mix(in srgb, var(--primario) 35%, transparent); border-right: 1px solid color-mix(in srgb, var(--primario) 35%, transparent); }
-.riel__dia { position: absolute; top: 76px; font-size: 0.75rem; color: var(--tinta-3); white-space: nowrap; transform: translateX(-50%); }
-.riel__corte { position: absolute; top: 34px; height: 42px; border-left: 1px solid var(--linea-fuerte); }
-.riel__marca { position: absolute; top: 47px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; border: 2px solid var(--primario); background: var(--superficie); transition: background-color var(--dur-estado) ease, border-color var(--dur-estado) ease; }
-.riel__marca--enviado { background: var(--primario); }
-.riel__marca--cancelado { border-color: var(--gris); background: var(--superficie); border-style: dashed; }
+.riel__dia { position: absolute; top: 96px; font-size: 0.75rem; color: var(--tinta-3); white-space: nowrap; transform: translateX(-50%); }
+.riel__corte { position: absolute; top: 18px; height: 78px; border-left: 1px solid var(--linea-fuerte); }
+.riel__marca { position: absolute; top: 47px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; border: 2px solid var(--primario); background: var(--superficie); display: grid; place-items: center; font-size: 0.625rem; font-weight: 800; line-height: 1; color: var(--primario-texto); font-variant-numeric: tabular-nums; transition: background-color var(--dur-estado) ease, border-color var(--dur-estado) ease; }
+.riel__marca--enviado { background: var(--primario); color: var(--sobre-primario); }
+.riel__marca--cancelado { border-color: var(--gris); background: var(--superficie); border-style: dashed; color: var(--gris); }
 .riel__marca--llamar { border-radius: 2px; border-color: var(--aviso); }
-.riel__marca--tarea { border-radius: 2px; border-color: var(--aviso); background: var(--aviso); }
+.riel__marca--llamar { color: var(--aviso); }
+.riel__marca--tarea { border-radius: 2px; border-color: var(--aviso); background: var(--aviso); color: var(--superficie); }
 .riel__marca--sms { border-radius: 3px; }
 .riel__ahora { position: absolute; top: 0; bottom: 30px; width: 0; border-left: 2px solid var(--peligro); transition: left var(--dur-vista) var(--ease-mover); }
 .riel__ahora span { position: absolute; top: 0; left: 6px; font-size: 0.75rem; font-weight: 700; color: var(--peligro); white-space: nowrap; background: var(--superficie); padding: 0 3px; }
@@ -216,6 +203,7 @@
 .envio__cuando { font-size: 0.875rem; font-variant-numeric: tabular-nums; color: var(--tinta-2); white-space: nowrap; }
 .envio__meta { font-size: 0.8125rem; color: var(--tinta-3); display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: center; }
 .envio__meta .ico { font-size: 0.95rem; }
+.envio__meta > span { display: inline-flex; align-items: center; gap: 4px; }
 .envio__texto { font-size: 0.875rem; color: var(--tinta-2); background: var(--superficie-2); padding: 8px 10px; overflow-wrap: anywhere; }
 .envio .acciones .boton { min-height: 40px; font-size: 0.8125rem; padding: 0 10px; }
 @media (pointer: coarse) { .envio .acciones .boton { min-height: 44px; } }

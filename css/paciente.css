@@ -1,0 +1,75 @@
+/* Vistas del paciente o del huésped: se abren en el teléfono, con una mano. Una columna, botones grandes. */
+
+.paciente { max-width: 560px; margin: 0 auto; padding: 20px 16px 48px; }
+.paciente h1 { font-size: 1.625rem; margin-bottom: 4px; }
+.paciente__intro { color: var(--tinta-2); margin-bottom: 16px; }
+.marca--paciente .marca__dentro { max-width: 560px; }
+
+.tarjeta-cita { background: var(--superficie); border: 1px solid var(--linea); padding: 16px; display: grid; gap: 12px; }
+.tarjeta-cita__cuando { display: grid; gap: 0; }
+.tarjeta-cita__fecha { font-size: 1.0625rem; font-weight: 650; color: var(--tinta-2); }
+.tarjeta-cita__hora { font-family: var(--f-titulo); font-weight: var(--peso-titulo); font-size: 2.25rem; line-height: 1.1; color: var(--primario-texto); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.tarjeta-cita .datos { font-size: 0.9375rem; }
+
+.respuestas { display: grid; gap: 10px; margin-top: 18px; }
+.boton--grande { min-height: 52px; font-size: 1.0625rem; width: 100%; }
+.boton--texto-peligro { color: var(--peligro); }
+.panel-respuesta { margin-top: 18px; border-top: 1px solid var(--linea); padding-top: 16px; display: grid; gap: 12px; }
+.panel-respuesta h2 { font-size: 1.125rem; }
+.opciones-hueco { display: grid; gap: 8px; }
+.opcion-hueco { display: flex; gap: 12px; align-items: center; min-height: 52px; padding: 8px 14px; border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); cursor: pointer; }
+.opcion-hueco:has(input:checked) { border-color: var(--primario); box-shadow: inset 0 0 0 1px var(--primario); background: var(--primario-suave); }
+.opcion-hueco:has(input:disabled) { cursor: not-allowed; color: var(--tinta-3); background: var(--superficie-2); }
+.opcion-hueco small { display: block; color: var(--tinta-3); font-size: 0.8125rem; }
+
+.resultado { margin-top: 18px; display: grid; gap: 10px; padding: 16px; background: var(--superficie); border: 1px solid var(--linea); }
+.resultado__titulo { display: flex; align-items: center; gap: 10px; font-size: 1.25rem; }
+.resultado__titulo .ico { font-size: 1.6rem; flex: none; }
+.resultado--ok .resultado__titulo { color: var(--ok); }
+.resultado--cancelada .resultado__titulo { color: var(--tinta-2); }
+.resultado--aviso .resultado__titulo { color: var(--aviso); }
+.resultado__marca { stroke-dasharray: 20; stroke-dashoffset: 20; animation: trazar 360ms var(--ease-salida) 80ms forwards; }
+@keyframes trazar { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .resultado__marca { animation: none; stroke-dashoffset: 0; } }
+.entrega { font-size: 0.875rem; color: var(--tinta-2); display: flex; gap: 8px; align-items: flex-start; }
+.entrega::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--gris); margin-top: 6px; flex: none; }
+.entrega[data-estado="ok"]::before { background: var(--ok); }
+.entrega[data-estado="error"]::before { background: var(--peligro); }
+.entrega[data-estado="enviando"]::before { background: var(--aviso); }
+
+.error-enlace { margin-top: 12px; }
+.pie-paciente { margin-top: 28px; font-size: 0.8125rem; color: var(--tinta-3); display: grid; gap: 6px; }
+
+/* ── Autoagendamiento ───────────────────────────────────────────────── */
+.pasos { display: grid; gap: 22px; }
+.paso { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; }
+.paso > legend { font-family: var(--f-titulo); font-weight: var(--peso-titulo); font-size: 1.125rem; margin-bottom: 8px; }
+.paso__num { display: block; font-family: var(--f-texto); font-size: 0.8125rem; font-weight: 650; color: var(--tinta-3); letter-spacing: 0; }
+.paso--bloqueado { opacity: 1; }
+.paso--bloqueado > *:not(legend) { display: none; }
+.paso--bloqueado > legend { color: var(--tinta-3); }
+.lista-opciones { display: grid; gap: 8px; }
+.tarjeta-opcion { display: flex; gap: 12px; align-items: center; min-height: 56px; padding: 10px 14px; border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); cursor: pointer; }
+.tarjeta-opcion:has(input:checked) { border-color: var(--primario); box-shadow: inset 0 0 0 1px var(--primario); background: var(--primario-suave); }
+.tarjeta-opcion:has(input:focus-visible) { outline: 2px solid var(--foco); outline-offset: 2px; }
+.tarjeta-opcion__texto { flex: 1; min-width: 0; }
+.tarjeta-opcion__texto small { display: block; color: var(--tinta-3); font-size: 0.8125rem; }
+.tarjeta-opcion__precio { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.dias__cabeza { font-size: 0.75rem; color: var(--tinta-3); text-align: center; font-weight: 650; }
+.dia { position: relative; }
+.dia input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.dia label { display: grid; place-items: center; gap: 0; min-height: 52px; border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); cursor: pointer; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; padding: 4px 0; }
+.dia label small { font-size: 0.6875rem; font-weight: 600; color: var(--tinta-3); }
+.dia input:checked + label { background: var(--primario); border-color: var(--primario); color: var(--sobre-primario); }
+.dia input:checked + label small { color: var(--sobre-primario); }
+.dia input:focus-visible + label { outline: 2px solid var(--foco); outline-offset: 2px; }
+.dia input:disabled + label { background: var(--superficie-2); border-color: var(--linea); color: var(--tinta-3); cursor: not-allowed; font-weight: 500; }
+.dia--vacio { visibility: hidden; }
+@media (hover: hover) and (pointer: fine) {
+  .tarjeta-opcion:hover, .opcion-hueco:hover { border-color: var(--primario); }
+  .dia input:not(:disabled) + label:hover { border-color: var(--primario); }
+}
+.resumen-pedido { background: var(--superficie-2); padding: 12px 14px; display: grid; gap: 4px; font-size: 0.9375rem; }
+.resumen-pedido strong { font-variant-numeric: tabular-nums; }
+.enviar-fijo { position: sticky; bottom: 0; background: var(--fondo); padding: 12px 0; border-top: 1px solid var(--linea); margin-top: 8px; }

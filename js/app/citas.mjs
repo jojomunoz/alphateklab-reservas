@@ -46,7 +46,7 @@ function pintarCabeza() {
     ['agenda', 'Agenda', ''],
     ['pacientes', v.Personas, ''],
     ['espera', 'Lista de espera', enEspera ? `<span class="cuenta">${enEspera}</span>` : ''],
-    ['riesgo', 'Riesgo', tareas ? `<span class="cuenta">${tareas}</span>` : ''],
+    ['riesgo', 'Riesgo', ''],
   ];
   pintarMarca($('#marca'), negocio, {
     enlace: 'citas.html',

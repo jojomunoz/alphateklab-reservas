@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
   crearEstadoNegocio, registrarPaciente, crearCita, reprogramarCita, cambiarEstado, responder, avanzarReloj,
   agregarAEspera, aceptarOferta, resolverTarea, revocarConsentimiento, eliminarPaciente, canalesDe, huecosAlternativos,
-  cambiarRegla, validarRegla,
+  cambiarRegla, validarRegla, solicitarCita,
 } from '../js/nucleo/operaciones.mjs';
+import { aplicarMensaje, mensajeRespuesta, mensajeSolicitud } from '../js/nucleo/mensajes-relevo.mjs';
+import { crearEstadoInicial } from '../js/nucleo/demo.mjs';
 import { NEGOCIOS_CITAS } from '../js/nucleo/negocios.mjs';
 import { msDeFecha, HORA, DIA, MIN } from '../js/nucleo/tiempo.mjs';
 import { decodificar } from '../js/nucleo/enlace.mjs';
@@ -189,4 +191,46 @@ test('cambiar la regla de una cita replanifica; una regla imposible no se guarda
   assert.equal(validarRegla({ ...regla, dias: [] })[0].campo, 'dias');
   assert.equal(validarRegla({ ...regla, hora: 21 * 60 })[0].campo, 'hora');
   assert.equal(cambiarRegla(st, cita.id, { ...regla, dias: [] }, LUNES).ok, false);
+});
+
+test('autoagenda: registra o reconoce a la persona, crea la cita pendiente y no filtra de quién es una cédula', () => {
+  const { st, p1 } = base();
+  const persona = { nombre: 'Nueva Persona', cedula: '8-000-2001', telefono: '6000-0201', consentimiento: true };
+  const r = solicitarCita(st, neg, { persona, servicioId: 'control', profesionalId: null, inicio: t('2026-10-08', '10:00') }, LUNES);
+  assert.ok(r.ok);
+  assert.equal(r.cita.estado, 'pendiente');
+  assert.equal(r.cita.origen, 'autoagenda');
+  assert.ok(st.envios.some((e) => e.citaId === r.cita.id), 'tiene recordatorios');
+  // La misma persona otra vez: no se duplica.
+  const r2 = solicitarCita(st, neg, { persona, servicioId: 'control', profesionalId: null, inicio: t('2026-10-09', '10:00') }, LUNES);
+  assert.equal(r2.paciente.id, r.paciente.id);
+  // Cédula de otra persona con otro celular: no se dice de quién es.
+  const r3 = solicitarCita(st, neg, { persona: { ...persona, cedula: p1.cedula }, servicioId: 'control', inicio: t('2026-10-09', '11:00') }, LUNES);
+  assert.equal(r3.ok, false);
+  assert.ok(!r3.errores[0].mensaje.includes(p1.nombre));
+  // Hora ocupada: no se guarda nada (ni la persona nueva).
+  const antes = st.pacientes.length;
+  const r4 = solicitarCita(st, neg, { persona: { nombre: 'Otra Nueva', cedula: '8-000-2002', telefono: '6000-0202', consentimiento: true }, servicioId: 'control', profesionalId: 'rios', inicio: t('2026-10-08', '10:00') }, LUNES);
+  assert.equal(r4.ok, false);
+  assert.match(r4.errores[0].mensaje, /se acaba de ocupar/);
+  assert.equal(st.pacientes.length, antes);
+  // Sin consentimiento no hay cita.
+  assert.equal(solicitarCita(st, neg, { persona: { ...persona, cedula: '8-000-2003', telefono: '6000-0203', consentimiento: false }, servicioId: 'control', inicio: t('2026-10-09', '9:00') }, LUNES).errores[0].campo, 'consentimiento');
+});
+
+test('mensajes del relevo: se valida la forma, se aplican una sola vez', () => {
+  const estado = crearEstadoInicial(t('2026-10-06', '10:00'), { urlBase: 'x', sala: 'abcdefghij' });
+  const st = estado.negocios.consultorio;
+  const cita = st.citas.find((c) => c.estado === 'pendiente' && c.inicio > estado.reloj.ahora);
+  const m = mensajeRespuesta({ id: 'r_relevo1', pl: 'consultorio', citaId: cita.id, respuesta: 'confirmo' });
+  assert.equal(aplicarMensaje(estado, m).resultado, 'confirmada');
+  assert.equal(cita.estado, 'confirmada');
+  assert.equal(aplicarMensaje(estado, m).resultado, 'repetida');
+  assert.equal(aplicarMensaje(estado, { ...m, id: 'r_2', respuesta: 'borrar-todo' }).resultado, 'forma');
+  assert.equal(aplicarMensaje(estado, { ...m, id: 'r_3', pl: '__proto__' }).resultado, 'forma');
+  assert.equal(aplicarMensaje(estado, { ...m, id: '<script>' }).resultado, 'forma');
+  const sol = mensajeSolicitud({ id: 's_1', pl: 'consultorio', cita: { servicioId: 'control', profesionalId: null, inicio: Math.round(t('2026-10-07', '15:00') / 60000) }, paciente: { nombre: 'Desde Teléfono', cedula: '8-000-3001', telefono: '6000-0301', consentimiento: true } });
+  const r = aplicarMensaje(estado, sol);
+  assert.equal(r.resultado, 'creada');
+  assert.equal(aplicarMensaje(estado, sol).resultado, 'repetida');
 });

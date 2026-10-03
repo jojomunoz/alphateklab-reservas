@@ -355,6 +355,46 @@ export function responder(st, negocioBase, r, ahora) {
   return { ok: false, resultado: 'desconocida' };
 }
 
+// ── Autoagendamiento (la persona pide la cita desde la página) ─────────────
+
+/**
+ * Busca a la persona por cédula y celular (o la registra) y crea la cita. Si la cédula ya existe con otro celular,
+ * no se revela de quién es: se pide llamar. Si la hora ya no está libre, no se guarda nada.
+ * datos = { persona: {nombre, cedula, telefono, correo, consentimiento}, servicioId, profesionalId, inicio }
+ */
+export function solicitarCita(st, negocioBase, datos, ahora) {
+  const negocio = negocioEfectivo(negocioBase, st);
+  const ced = validarCedula(datos.persona.cedula), tel = normalizarTelefono(datos.persona.telefono);
+  let paciente = null;
+  if (ced.ok && tel.ok) {
+    const mismo = st.pacientes.find((p) => !p.eliminado && p.cedula === ced.valor);
+    if (mismo && mismo.telefono !== tel.e164) {
+      return { ok: false, errores: [{ campo: 'cedula', mensaje: `Esa cédula ya está registrada con otro celular. Llama ${negocio.vocab.alNegocio} para pedir la cita.` }] };
+    }
+    if (mismo) {
+      if (!datos.persona.consentimiento) return { ok: false, errores: [{ campo: 'consentimiento', mensaje: 'Marca la casilla del consentimiento para pedir la cita.' }] };
+      paciente = mismo;
+      if (!mismo.consentimiento || mismo.revocado) renovarConsentimiento(st, negocio, mismo.id, 'en la página de citas', ahora);
+    }
+  }
+  let creado = false;
+  if (!paciente) {
+    const rp = registrarPaciente(st, negocio, { ...datos.persona, canalConsentimiento: 'en la página de citas' }, ahora);
+    if (!rp.ok) return rp;
+    paciente = rp.paciente;
+    creado = true;
+  }
+  const r = crearCita(st, negocio, {
+    pacienteId: paciente.id, servicioId: datos.servicioId, profesionalId: datos.profesionalId || null, salaId: null,
+    inicio: datos.inicio, estado: negocio.ajustes.autoConfirmar ? 'confirmada' : 'pendiente',
+  }, ahora, { origen: 'autoagenda' });
+  if (!r.ok) {
+    if (creado) st.pacientes = st.pacientes.filter((p) => p.id !== paciente.id);
+    return { ok: false, errores: r.errores.map((e) => (['solape_profesional', 'solape_sala', 'pasado'].includes(e.codigo) ? { ...e, mensaje: 'Esa hora se acaba de ocupar. Elige otra.' } : e)) };
+  }
+  return { ok: true, cita: r.cita, paciente };
+}
+
 // ── Tareas de recepción ───────────────────────────────────────────────────
 
 export function crearTarea(st, cita, motivo, ahora) {

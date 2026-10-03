@@ -3,7 +3,7 @@
 
 import { esc, confirmar, icono } from './ui.mjs';
 import { preferencia, restablecer, hayAlmacenamiento, cargar } from './almacen.mjs';
-import { NEGOCIOS_CITAS, NEGOCIO_ALOJAMIENTO, PLANTILLAS } from '../nucleo/negocios.mjs';
+import { NEGOCIOS_CITAS, NEGOCIO_ALOJAMIENTO, PLANTILLAS, negocioCitas as buscarNegocio } from '../nucleo/negocios.mjs';
 import { fechaCorta, horaTexto } from '../nucleo/tiempo.mjs';
 
 const VISTAS = [
@@ -18,7 +18,7 @@ const VISTAS = [
 /** Plantilla de citas elegida (consultorio, barbería, taller). */
 export function plantillaCitas() {
   const p = preferencia('plantilla');
-  return NEGOCIOS_CITAS[p] ? p : 'consultorio';
+  return buscarNegocio(p) ? p : 'consultorio';
 }
 
 export function negocioCitas() {

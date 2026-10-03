@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es-PA" data-marca="consultorio">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bandeja de envíos · alphateklab Reservas</title>
+<meta name="description" content="Bandeja de recordatorios con un reloj de demostración: la cola de mensajes, los reintentos y cómo se detienen solos cuando el paciente confirma.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fuentes/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/recepcion.css">
+<script>try{var d=document.documentElement,t=localStorage.getItem('atk-reservas-pref-tema'),p=localStorage.getItem('atk-reservas-pref-plantilla');if(t==='claro'||t==='oscuro')d.dataset.tema=t;if(p==='consultorio'||p==='barberia'||p==='taller')d.dataset.marca=p}catch(e){}</script>
+<script type="module" src="js/app/bandeja.mjs"></script>
+</head>
+<body>
+<a class="saltar" href="#principal">Saltar al contenido</a>
+<div id="barra-demo" class="barra-demo"></div>
+<header id="marca" class="marca"></header>
+<main id="principal" class="envoltura" tabindex="-1">
+  <h1 class="sr-only">Bandeja de envíos con el reloj de la demo</h1>
+  <noscript><p>Esta demo funciona con JavaScript. Actívalo para ver la bandeja.</p></noscript>
+  <section id="reloj" class="reloj" aria-label="Reloj de la demo"><p class="cargando">Cargando la bandeja…</p></section>
+  <div id="listas" class="bandeja"></div>
+</main>
+<footer id="pie" class="pie"></footer>
+</body>
+</html>

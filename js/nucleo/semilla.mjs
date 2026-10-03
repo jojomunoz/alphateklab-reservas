@@ -146,7 +146,9 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
     if (destino === 'reprogramada') c.historial.push({ t: c.creada + HORA, texto: 'Reprogramada en recepción' });
     if (pasada && destino !== 'cancelada') c.historial.push({ t: c.fin, texto: destino === 'atendida' ? 'Atendida' : 'No asistió' });
 
-    const corte = respuesta ?? (destino === 'confirmada' ? c.creada : destino === 'cancelada' && pasada ? c.inicio - DIA : Infinity);
+    // Confirmada por teléfono al agendarla: nunca tuvo recordatorios (planificar no programa nada para una confirmada).
+    if (destino === 'confirmada' && !respuesta) continue;
+    const corte = respuesta ?? (destino === 'cancelada' && pasada ? c.inicio - DIA : Infinity);
     let enviados = 0;
     for (const m of mensajes) {
       const e = {
