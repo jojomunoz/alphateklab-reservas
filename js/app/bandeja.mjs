@@ -135,12 +135,21 @@ function etiquetaClase(e) {
   return `Recordatorio ${e.etiqueta} · ${e.intento} de ${e.de}`;
 }
 
-/** El texto del mensaje con el enlace largo de la demo abreviado (el enlace completo sigue en «Ver como…»). */
-function textoConEnlaceCorto(e) {
-  if (!e.enlace || !e.texto.includes(e.enlace)) return esc(e.texto);
-  const [antes, despues] = e.texto.split(e.enlace);
-  const corto = `…/confirmar.html#${(e.enlace.split('#')[1] || '').slice(0, 10)}…`;
-  return `${esc(antes)}<a href="${esc(e.enlace)}" target="_blank" rel="noopener">${esc(corto)}</a>${esc(despues)}`;
+/** «jojomunoz.github.io/…/confirmar»: el enlace de la demo lleva la cita firmada y pasa de 250 caracteres. */
+function enlaceCorto(enlace) {
+  try {
+    const u = new URL(enlace);
+    return `${u.host}/…/${u.pathname.split('/').pop().replace(/\.html$/, '')}`;
+  } catch {
+    return `…/confirmar.html#${(enlace.split('#')[1] || '').slice(0, 10)}…`;
+  }
+}
+
+/** El texto del mensaje con el enlace abreviado; el completo sigue en el propio enlace, en «Copiar enlace» y en el QR. */
+function textoConEnlaceCorto({ texto, enlace }) {
+  if (!enlace || !texto.includes(enlace)) return esc(texto);
+  const [antes, despues] = texto.split(enlace);
+  return `${esc(antes)}<a href="${esc(enlace)}" target="_blank" rel="noopener" title="Enlace de un solo uso">${esc(enlaceCorto(enlace))}</a>${esc(despues)}`;
 }
 
 function htmlEnvio(e, st, negocio, { conTexto = false } = {}) {
@@ -317,9 +326,9 @@ function abrirEnvio(id) {
         <dt>Para</dt><dd>${esc(p ? p.nombre : '—')} · ${esc(p ? mostrarTelefono(p.telefono) : '')}</dd>
         <dt>Canal</dt><dd>${CANALES[e.canal]} · ${esc(etiquetaClase(e))}</dd>
         <dt>${e.estado === 'enviado' ? 'Salió' : 'Sale'}</dt><dd>${esc(cuando(e.estado === 'enviado' ? e.salioEn : e.momento))}</dd>
-        ${sms ? `<dt>SMS</dt><dd>${sms.segmentos} ${sms.segmentos === 1 ? 'segmento' : 'segmentos'} (${sms.codificacion}, ${sms.largo} caracteres con este enlace largo de la demo)</dd>` : ''}
+        ${sms ? `<dt>SMS</dt><dd>Cuenta como ${sms.segmentos} SMS (${sms.largo} caracteres${sms.codificacion === 'UCS-2' ? '; con tildes o ñ, cada SMS lleva 70 en vez de 160' : ''}). Con el dominio del negocio, el enlace es más corto.</dd>` : ''}
       </dl>
-      <p class="envio__texto" style="margin-top:12px">${esc(texto)}</p>
+      <p class="envio__texto" style="margin-top:12px">${textoConEnlaceCorto({ texto, enlace })}</p>
       ${e.estado !== 'enviado' ? '<p class="campo__ayuda" style="margin-top:6px">Así saldría si saliera ahora; el texto final se arma al salir.</p>' : ''}
       <div class="acciones" style="margin-top:14px">
         ${p ? botonAbrirEnvio(e, p, { clase: 'boton boton--primario', texto }) : ''}
@@ -329,12 +338,22 @@ function abrirEnvio(id) {
       <div class="bloque-dialogo" style="margin-top:18px">
         <h3>Ábrelo en tu teléfono</h3>
         <div class="qr" data-qr><p class="campo__ayuda">Generando el código QR…</p></div>
-        <p class="campo__ayuda" style="margin-top:6px">Escanéalo para ver el enlace como lo vería ${esc(negocio.vocab.persona === 'paciente' ? 'el paciente' : 'el cliente')}. Si respondes desde el teléfono, esta pantalla se entera por el relevo de pruebas (ntfy.sh). Desde «localhost» el teléfono no llega; desde la dirección publicada, sí.</p>
+        <p class="campo__ayuda" style="margin-top:6px">Escanéalo para verlo como lo vería ${esc(negocio.vocab.persona === 'paciente' ? 'el paciente' : 'el cliente')}. Si respondes desde el teléfono, esta pantalla se entera en unos segundos.${/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) ? ' Desde «localhost» el teléfono no llega: ábrelo desde la dirección publicada.' : ''}</p>
         <p class="nota nota--relevo" style="margin-top:8px">${esc(AVISO_RELEVO)}</p>
-        <p class="enlace-largo" style="margin-top:8px">${esc(enlace)}</p>
+        <details class="enlace-completo" style="margin-top:8px"><summary>Ver el enlace completo</summary><p class="enlace-largo">${esc(enlace)}</p></details>
       </div>`,
   });
-  d.querySelector('[data-copiar]').addEventListener('click', async () => anunciar(await copiar(enlace) ? 'Enlace copiado.' : 'No se pudo copiar: selecciona el enlace de abajo y cópialo.'));
+  d.querySelector('[data-copiar]').addEventListener('click', async () => {
+    if (await copiar(enlace)) { anunciar('Enlace copiado.'); return; }
+    // sin permiso para el portapapeles: se abre el enlace completo y queda seleccionado para copiarlo a mano
+    const det = d.querySelector('.enlace-completo');
+    det.open = true;
+    const r = document.createRange();
+    r.selectNodeContents(det.querySelector('.enlace-largo'));
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    anunciar('No se pudo copiar: el enlace quedó seleccionado abajo para copiarlo a mano.');
+  });
   qrSvg(enlace).then((svg) => {
     const q = d.querySelector('[data-qr]');
     if (!q) return;
