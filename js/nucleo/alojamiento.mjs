@@ -226,8 +226,24 @@ export function actualizarSincronizaciones(canales, ahora) {
     const paso = (c.intervaloHoras || 2) * HORA;
     if (ahora - c.ultimaSync < paso) return c;
     const saltos = Math.floor((ahora - c.ultimaSync) / paso);
-    return { ...c, ultimaSync: c.ultimaSync + saltos * paso };
+    // un canal que funciona relee todas sus cabañas: lo importado a mano por cabaña ya no hace falta
+    return { ...c, ultimaSync: c.ultimaSync + saltos * paso, syncUnidades: {} };
   });
+}
+
+/**
+ * Cuándo sincronizó por última vez cada cabaña conectada al canal. Si nunca se importó una a mano, vale la del canal.
+ * El canal cuenta como sincronizado desde la cabaña más atrasada: importar el .ics de una sola no pone al día a las demás
+ * (revisión del 3-oct: con Booking caído, una cabaña importada daba por sincronizado todo el canal y reabría la venta).
+ */
+export function syncPorUnidad(canal) {
+  const base = canal.ultimaSync;
+  return Object.fromEntries(Object.keys(canal.urls || {}).map((u) => [u, canal.syncUnidades?.[u] ?? base]));
+}
+
+/** Cabañas del canal que todavía no tienen una sincronización posterior a `desde` (por ejemplo, al cierre preventivo). */
+export function unidadesSinSincronizar(canal, desde) {
+  return Object.entries(syncPorUnidad(canal)).filter(([, t]) => !(t > desde)).map(([u]) => u);
 }
 
 /** Cabañas que se pueden vender en la página directa para esas fechas, y por qué no las demás. */
@@ -377,10 +393,10 @@ export function cancelarReserva(aloj, reservaId, ahora) {
 
 export function verificarSena(aloj, reservaId, ahora) {
   const r = aloj.reservas.find((x) => x.id === reservaId);
-  if (!r || !r.sena) return { ok: false, errores: [{ mensaje: 'Esa reserva no tiene seña.' }] };
+  if (!r || !r.sena) return { ok: false, errores: [{ mensaje: 'Esa reserva no tiene depósito.' }] };
   r.sena.estado = 'verificada';
   r.sena.verificadaEn = ahora;
-  anotarAloj(aloj, ahora, `Seña verificada: ${r.huesped?.nombre || 'reserva'}.`);
+  anotarAloj(aloj, ahora, `Depósito verificado: ${r.huesped?.nombre || 'reserva'}.`);
   return { ok: true };
 }
 
@@ -402,6 +418,7 @@ export function simularCaida(aloj, canalId, ahora, horas = 9) {
   if (!c) return { ok: false };
   c.caido = true;
   c.ultimaSync = Math.min(c.ultimaSync, ahora - horas * HORA);
+  c.syncUnidades = {};
   anotarAloj(aloj, ahora, `${c.nombre} dejó de sincronizar (simulado).`);
   return { ok: true, canal: c };
 }
@@ -411,6 +428,7 @@ export function restablecerCanal(aloj, canalId, ahora) {
   if (!c) return { ok: false };
   c.caido = false;
   c.ultimaSync = ahora;
+  c.syncUnidades = {};
   anotarAloj(aloj, ahora, `${c.nombre} volvió a sincronizar.`);
   return { ok: true, canal: c };
 }
@@ -459,12 +477,21 @@ export function reabrirVenta(aloj, canalId, ahora) {
   return { ok: true };
 }
 
-/** Aplica un .ics importado para un canal y una cabaña, y lo cuenta como sincronización correcta. */
+/**
+ * Aplica un .ics importado para un canal y una cabaña, y lo cuenta como sincronización correcta DE ESA CABAÑA.
+ * El canal queda al día solo cuando todas sus cabañas lo están: vale la fecha de la más atrasada.
+ */
 export function aplicarImportacion(aloj, canalId, unidadId, eventos, ahora) {
   const r = sincronizarCanal(aloj.reservas, canalId, unidadId, eventos, ahora, nuevoIdReserva);
   aloj.reservas = r.reservas;
   const c = aloj.canales.find((x) => x.id === canalId);
-  if (c) c.ultimaSync = ahora;
+  if (c) {
+    const porUnidad = { ...syncPorUnidad(c), [unidadId]: ahora };
+    c.syncUnidades = porUnidad;
+    const conectadas = Object.keys(c.urls || {});
+    const fechas = conectadas.length ? conectadas.map((u) => porUnidad[u]) : [ahora];
+    c.ultimaSync = Math.min(...fechas);
+  }
   anotarAloj(aloj, ahora, `Importado el calendario de ${c ? c.nombre : canalId}: ${r.nuevas.length} nuevas, ${r.cambiadas.length} cambiadas, ${r.quitadas.length} quitadas${r.ecos ? `, ${r.ecos} propias ignoradas (eco)` : ''}.`);
   return { ok: true, ...r };
 }

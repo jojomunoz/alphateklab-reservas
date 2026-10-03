@@ -42,14 +42,23 @@ function citaConTarea() {
 test('autoagenda: una cédula que ya existe no revela de quién es, venga el celular bien, mal o vacío', () => {
   const { st, p1 } = base();
   const antes = st.bitacora.length;
-  for (const telefono of ['123', '6000-0999', '']) {
+  // celular mal escrito o vacío: el error es de formato, el mismo que para cualquier cédula, y no se anota nada
+  for (const telefono of ['123', '']) {
     const r = solicitarCita(st, neg, { persona: { nombre: 'Otra Persona', cedula: p1.cedula, telefono, consentimiento: true }, servicioId: 'control', inicio: t('2026-10-09', '11:00') }, LUNES);
     assert.equal(r.ok, false, telefono);
     const textos = r.errores.map((e) => e.mensaje).join(' ');
     assert.ok(!textos.includes('Iván') && !textos.includes('De León'), `«${textos}» nombra a la persona`);
-    assert.ok(!/Búscalo|Ya hay alguien|ya está registrada/.test(textos), `«${textos}» confirma que la cédula existe`);
+    assert.ok(!/Búscalo|Ya hay alguien|ya está registrada|Llama/.test(textos), `«${textos}» confirma que la cédula existe`);
   }
   assert.equal(st.bitacora.length, antes, 'nada queda en la bitácora');
+  // celular válido y distinto: la misma respuesta que una cédula que nadie tiene (antes decía «llama», y eso delataba)
+  const ajena = solicitarCita(st, neg, { persona: { nombre: 'Otra Persona', cedula: p1.cedula, telefono: '6000-0999', consentimiento: true }, servicioId: 'control', inicio: t('2026-10-09', '11:00') }, LUNES);
+  const nueva = solicitarCita(st, neg, { persona: { nombre: 'Otra Persona', cedula: '8-000-9555', telefono: '6000-0998', consentimiento: true }, servicioId: 'control', inicio: t('2026-10-09', '10:00') }, LUNES);
+  assert.equal(ajena.ok, true, JSON.stringify(ajena.errores));
+  assert.equal(nueva.ok, true, JSON.stringify(nueva.errores));
+  assert.deepEqual(Object.keys(ajena).sort(), Object.keys(nueva).sort());
+  assert.equal(ajena.cita.estado, nueva.cita.estado);
+  assert.ok(!JSON.stringify(ajena).includes('Iván'), 'la respuesta no trae datos del registro existente');
 });
 
 test('autoagenda: si la hora no sirve no se registra a nadie ni se anota nada; una hora pasada no se llama «ocupada»', () => {

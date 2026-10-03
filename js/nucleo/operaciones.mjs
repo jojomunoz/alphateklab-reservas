@@ -425,12 +425,12 @@ export function responder(st, negocioBase, r, ahora) {
 
 // ── Autoagendamiento (la persona pide la cita desde la página) ─────────────
 
-const NO_VERIFICADA = (negocio) => `No pudimos agendarla en línea con estos datos. Llama ${negocio.vocab.alNegocio} al ${negocio.telefono ? negocio.telefono.replace(/^\+507(\d{4})(\d{4})$/, '+507 $1-$2') : 'teléfono del negocio'} y te la agendamos.`;
-
 /**
  * Busca a la persona por cédula y celular (o la registra) y crea la cita.
  * - La página es pública: nunca dice de quién es una cédula ni si ya está registrada. Si la cédula existe con otro
- *   celular, se pide llamar con un mensaje que no confirma nada.
+ *   celular, la solicitud se trata igual que la de una persona nueva (la respuesta pública es idéntica), queda marcada
+ *   «por verificar» y recepción recibe una tarea; el registro existente no se toca ni se muestra. Antes se pedía
+ *   llamar, y esa diferencia decía si una cédula estaba registrada (revisión del 3-oct).
  * - Primero se valida todo (datos y hora) y después se escribe: si la hora ya no sirve, no queda nadie registrado
  *   ni una línea en la bitácora.
  * datos = { persona: {nombre, cedula, telefono, correo, consentimiento}, servicioId, profesionalId, inicio }
@@ -445,9 +445,10 @@ export function solicitarCita(st, negocioBase, datos, ahora) {
     // Un error de formato se puede decir; que la cédula exista, no.
     return { ok: false, errores: revision.errores };
   }
-  if (existente && existente.telefono !== tel.e164) return { ok: false, errores: [{ codigo: 'no_verificada', mensaje: NO_VERIFICADA(negocio) }] };
+  const porVerificar = Boolean(existente && existente.telefono !== tel.e164);
+  const conocido = porVerificar ? null : existente;
 
-  const pacienteId = existente ? existente.id : null;
+  const pacienteId = conocido ? conocido.id : null;
   const d = asignar(negocio, st, { servicioId: datos.servicioId, profesionalId: datos.profesionalId || null, salaId: null, inicio: datos.inicio, pacienteId }, ahora);
   const servicio = servicioDe(negocio, d.servicioId);
   const errCita = validarCita(negocio, st.citas, { ...d, fin: servicio ? d.inicio + servicio.min * MIN : undefined }, ahora);
@@ -461,16 +462,18 @@ export function solicitarCita(st, negocioBase, datos, ahora) {
     };
   }
 
-  let paciente = existente;
+  let paciente = conocido;
   if (paciente) {
     if (!paciente.consentimiento || paciente.revocado) renovarConsentimiento(st, negocio, paciente.id, 'en la página de citas', ahora);
   } else {
     paciente = guardarPersona(st, negocio, { ...persona, canalConsentimiento: 'en la página de citas' }, revision, ahora);
+    if (porVerificar) paciente.porVerificar = 'La cédula ya estaba registrada con otro celular: verifica quién es antes de la cita.';
   }
   const r = crearCita(st, negocio, {
     pacienteId: paciente.id, servicioId: d.servicioId, profesionalId: d.profesionalId, salaId: d.salaId,
     inicio: d.inicio, estado: negocio.ajustes.autoConfirmar ? 'confirmada' : 'pendiente',
   }, ahora, { origen: 'autoagenda' });
+  if (r.ok && porVerificar) crearTarea(st, r.cita, 'Verificar identidad: la cédula ya estaba registrada con otro celular', ahora);
   return r.ok ? { ok: true, cita: r.cita, paciente } : r;
 }
 

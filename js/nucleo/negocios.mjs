@@ -151,7 +151,7 @@ export const NEGOCIO_ALOJAMIENTO = {
   // Temporada alta de diciembre a abril (la seca). Mínimo de noches según la temporada de la noche de llegada.
   temporadas: { alta: { meses: [12, 1, 2, 3, 4], minNoches: 3 }, baja: { minNoches: 2 } },
   itbms: 0.10, // hospedaje: 10 % (DGI)
-  sena: 0.30, // seña para apartar, decisión del alojamiento de ejemplo
+  sena: 0.30, // depósito para apartar, decisión del alojamiento de ejemplo
   yappy: '@alojamiento-de-ejemplo',
 };
 

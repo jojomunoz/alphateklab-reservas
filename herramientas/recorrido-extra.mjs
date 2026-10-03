@@ -1,7 +1,7 @@
 // Segundo recorrido con Playwright: lo que el primero no toca. Autoagenda del paciente, cambiar la cita desde el
 // enlace, cancelar y que el hueco se ofrezca a la lista de espera (el primero que acepta se lo queda), reprogramar
 // desde recepción con validación, vocabulario de otra plantilla, reserva de grupo con solape rechazado y reserva
-// directa del huésped con ITBMS y seña. Requiere el servidor en el puerto 4730 (o el de la variable PUERTO).
+// directa del huésped con ITBMS y depósito. Requiere el servidor en el puerto 4730 (o el de la variable PUERTO).
 // Uso: node herramientas/recorrido-extra.mjs
 import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
 import { mkdirSync } from 'node:fs';
@@ -278,7 +278,7 @@ try {
   await p.keyboard.press('Escape');
   await p.keyboard.press('Escape');
 
-  // ── 7. Huésped: fechas → cabañas → total con ITBMS 10 % → datos → seña por verificar ──
+  // ── 7. Huésped: fechas → cabañas → total con ITBMS 10 % → datos → depósito por verificar ──
   const h = await ctx.newPage();
   vigilar(h, 'huésped');
   await h.setViewportSize({ width: 390, height: 844 });
@@ -307,7 +307,7 @@ try {
   await h.waitForTimeout(300);
   e = await estadoDe(p);
   const directa = e.alojamiento.reservas.find((r) => r.llegada === lleg && r.salida === sal && r.canal === 'directo' && r.huesped?.nombre === 'Huésped de Prueba');
-  comprobar('huésped: la reserva directa entra con la seña «por verificar»', directa && directa.sena && directa.sena.estado !== 'verificada', directa ? JSON.stringify(directa.sena) : 'no entró');
+  comprobar('huésped: la reserva directa entra con el depósito «por verificar»', directa && directa.sena && directa.sena.estado !== 'verificada', directa ? JSON.stringify(directa.sena) : 'no entró');
   await h.screenshot({ path: CAP + 'extra-huesped-listo-390.png', fullPage: true });
   await ctx.close();
 } catch (err) {

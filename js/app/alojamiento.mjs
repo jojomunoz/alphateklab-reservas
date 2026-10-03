@@ -8,7 +8,7 @@ import { fechaISO, fechaLarga, fechaCorta, horaTexto, sumarDias, diferenciaDias,
 import {
   CANALES_ALOJ, activa, cabanaDe, rangoTexto, temporadaDe, minimoNoches, cotizar, detectarChoques, proponerReubicacion, vigilar,
   eventosParaExportar, crearReserva, cancelarReserva, verificarSena, moverReserva, simularCaida, restablecerCanal, simularReservaOta,
-  activarCierre, reabrirVenta, cierreVigente, aplicarImportacion, nochesEntre, MAX_HORAS_POR_DEFECTO,
+  activarCierre, reabrirVenta, cierreVigente, aplicarImportacion, nochesEntre, MAX_HORAS_POR_DEFECTO, unidadesSinSincronizar,
   sincronizoDespuesDe, unidadesEnRiesgo, previsualizarImportacion,
 } from '../nucleo/alojamiento.mjs';
 import { exportarCalendario, importarCalendario } from '../nucleo/ical.mjs';
@@ -67,7 +67,12 @@ function htmlAlertas() {
     // sincronizó después del cierre (subir el máximo apaga la alerta, pero no arregla el canal).
     const hecho = !canal ? ''
       : sincronizoDespuesDe(canal, c) ? `${canal.nombre} volvió a sincronizar el ${fechaCorta(canal.ultimaSync)} a las ${horaTexto(canal.ultimaSync)}: revisa los choques y reabre.`
-        : `${canal.nombre} no sincroniza desde el ${fechaCorta(canal.ultimaSync)} a las ${horaTexto(canal.ultimaSync)} (${haceTexto(canal.ultimaSync, ahora)}${v.vencido ? `; el máximo es ${v.max} h` : `; dentro del máximo de ${v.max} h, pero todavía no volvió`}).`;
+        : `${canal.nombre} no sincroniza desde el ${fechaCorta(canal.ultimaSync)} a las ${horaTexto(canal.ultimaSync)} (${haceTexto(canal.ultimaSync, ahora)}${v.vencido ? `; el máximo es ${v.max} h` : `; dentro del máximo de ${v.max} h, pero todavía no volvió`}).${(() => {
+            // importar a mano el .ics de algunas cabañas no basta: se dice cuáles faltan
+            const faltan = unidadesSinSincronizar(canal, c.desde);
+            const total = Object.keys(canal.urls || {}).length;
+            return faltan.length && faltan.length < total ? ` Importaste a mano ${total - faltan.length} de ${total} cabañas; faltan ${nombres(faltan)}. Hasta tenerlas todas, el canal sigue sin sincronizar.` : '';
+          })()}`;
     html += `<div class="cierre-activo"><p class="cierre-activo__titulo">${icono('candado')} Venta directa cerrada en ${esc(nombres(c.unidades))}</p>
       <p>Desde el ${esc(fechaCorta(c.desde))} a las ${esc(horaTexto(c.desde))}, por ${esc(canal ? canal.nombre : c.canalId)}. La página del huésped no ofrece esas cabañas. ${esc(hecho)}</p>
       <div class="acciones"><button type="button" class="boton" data-reabrir="${c.canalId}">Reabrir la venta directa</button><a class="boton" href="alojamiento-reservar.html">Ver la página del huésped</a></div></div>`;
@@ -200,8 +205,8 @@ function htmlReservas() {
   const prox = aloj.reservas.filter((r) => activa(r) && r.salida >= hoy).sort((a, b) => (a.llegada < b.llegada ? -1 : 1));
   return `
     <div class="seccion__cabeza"><h2 id="t-res">Reservas de hoy en adelante</h2><p>${prox.length} activas</p></div>
-    <div class="panel" style="overflow-x:auto">${prox.length ? `<table class="tabla tabla--apilable"><thead><tr><th scope="col">Llegada</th><th scope="col">Salida</th><th scope="col">Cabañas</th><th scope="col">Canal</th><th scope="col">Huésped</th><th scope="col">Seña</th></tr></thead><tbody>
-      ${prox.map((r) => `<tr><td data-etiqueta="Llegada"><button type="button" class="persona__nombre" data-reserva="${r.id}">${esc(fechaCorta(r.llegada))}</button></td><td data-etiqueta="Salida">${esc(fechaCorta(r.salida))} · ${diferenciaDias(r.llegada, r.salida)} n.</td><td data-etiqueta="Cabañas">${esc(nombres(r.unidades))}</td><td data-etiqueta="Canal"><span class="muestra-canal barra-res--${r.canal}" aria-hidden="true"></span>${esc(CANALES_ALOJ[r.canal].nombre)}</td><td data-etiqueta="Huésped">${r.huesped ? esc(r.huesped.nombre) : r.canal === 'bloqueo' ? esc(r.nota || '—') : '<span class="campo__ayuda">no viene en el iCal</span>'}</td><td data-etiqueta="Seña">${r.sena ? (r.sena.estado === 'verificada' ? '<span class="insignia insignia--ok">Verificada</span>' : '<span class="insignia insignia--aviso">Por verificar</span>') : '—'}</td></tr>`).join('')}
+    <div class="panel" style="overflow-x:auto">${prox.length ? `<table class="tabla tabla--apilable"><thead><tr><th scope="col">Llegada</th><th scope="col">Salida</th><th scope="col">Cabañas</th><th scope="col">Canal</th><th scope="col">Huésped</th><th scope="col">Depósito</th></tr></thead><tbody>
+      ${prox.map((r) => `<tr><td data-etiqueta="Llegada"><button type="button" class="persona__nombre" data-reserva="${r.id}">${esc(fechaCorta(r.llegada))}</button></td><td data-etiqueta="Salida">${esc(fechaCorta(r.salida))} · ${diferenciaDias(r.llegada, r.salida)} n.</td><td data-etiqueta="Cabañas">${esc(nombres(r.unidades))}</td><td data-etiqueta="Canal"><span class="muestra-canal barra-res--${r.canal}" aria-hidden="true"></span>${esc(CANALES_ALOJ[r.canal].nombre)}</td><td data-etiqueta="Huésped">${r.huesped ? esc(r.huesped.nombre) : r.canal === 'bloqueo' ? esc(r.nota || '—') : '<span class="campo__ayuda">no viene en el iCal</span>'}</td><td data-etiqueta="Depósito">${r.sena ? (r.sena.estado === 'verificada' ? '<span class="insignia insignia--ok">Verificado</span>' : '<span class="insignia insignia--aviso">Por verificar</span>') : '—'}</td></tr>`).join('')}
     </tbody></table>` : '<p class="vacio"><strong>No hay reservas por delante.</strong></p>'}</div>`;
 }
 
@@ -283,7 +288,7 @@ function abrirNuevaReserva(preset = {}) {
           <div class="campo"><label for="nr-nombre">Nombre de quien reserva</label><input id="nr-nombre" type="text" name="nombre" autocomplete="off"></div>
           <div class="campo"><label for="nr-tel">Celular</label><input id="nr-tel" type="tel" name="telefono" inputmode="tel" placeholder="6000-0000"></div>
         </div>
-        <div class="campo"><label for="nr-sena">Seña</label><select id="nr-sena" name="sena"><option value="por_verificar">Por verificar (Yappy o transferencia)</option><option value="verificada">Ya verificada</option></select></div>
+        <div class="campo"><label for="nr-sena">Depósito</label><select id="nr-sena" name="sena"><option value="por_verificar">Por verificar (Yappy o transferencia)</option><option value="verificada">Ya verificado</option></select></div>
         <div class="consentimiento campo"><label class="opcion"><input type="checkbox" name="consentimiento"> <span>El huésped autorizó guardar sus datos para esta reserva (Ley 81 de 2019).</span></label></div>
         <label class="opcion"><input type="checkbox" name="ignorarMinimo"> Aceptar menos noches que el mínimo de la temporada</label>
       </div>
@@ -305,7 +310,7 @@ function abrirNuevaReserva(preset = {}) {
     if (!directo || !u.length || !esISO(f.llegada.value) || !esISO(f.salida.value) || f.salida.value <= f.llegada.value) { cont.innerHTML = ''; cont.hidden = true; return; }
     const c = cotizar(negocio, u, f.llegada.value, f.salida.value);
     cont.hidden = false;
-    cont.innerHTML = `<span>${c.noches} ${c.noches === 1 ? 'noche' : 'noches'} · ${esc(nombres(u))} · mínimo ${c.minimo} en temporada ${temporadaDe(negocio, f.llegada.value)}${c.cumpleMinimo ? '' : ' <strong>(no lo cumple)</strong>'}</span><span>Subtotal ${balboas(c.subtotal)} + ITBMS 10 % ${balboas(c.impuesto)}</span><strong>Total ${balboas(c.total)} · seña ${balboas(c.sena)}</strong>`;
+    cont.innerHTML = `<span>${c.noches} ${c.noches === 1 ? 'noche' : 'noches'} · ${esc(nombres(u))} · mínimo ${c.minimo} en temporada ${temporadaDe(negocio, f.llegada.value)}${c.cumpleMinimo ? '' : ' <strong>(no lo cumple)</strong>'}</span><span>Subtotal ${balboas(c.subtotal)} + ITBMS 10 % ${balboas(c.impuesto)}</span><strong>Total ${balboas(c.total)} · depósito ${balboas(c.sena)}</strong>`;
   };
   form.addEventListener('change', actualizar);
   form.addEventListener('submit', (ev) => {
@@ -346,12 +351,12 @@ function abrirReserva(id) {
       <dt>Cabañas</dt><dd>${esc(nombres(r.unidades))}${r.unidades.length > 1 ? ' (grupo, una sola reserva)' : ''}</dd>
       <dt>Fechas</dt><dd>Llega el ${esc(fechaLarga(r.llegada))}, sale el ${esc(fechaLarga(r.salida))} · ${diferenciaDias(r.llegada, r.salida)} noches</dd>
       ${r.huesped ? `<dt>Huésped</dt><dd>${esc(r.huesped.nombre)}${r.huesped.personas ? ` · ${r.huesped.personas} personas` : ''}${r.huesped.telefono ? ` · <a href="tel:${esc(r.huesped.telefono)}">${esc(mostrarTelefono(r.huesped.telefono))}</a>` : ''}</dd>` : r.canal !== 'bloqueo' ? `<dt>Huésped</dt><dd>${esc(canal.largo)} no comparte el nombre en el iCal${r.resumen ? ` (dice «${esc(r.resumen)}»)` : ''}.</dd>` : `<dt>Motivo</dt><dd>${esc(r.nota || '—')}</dd>`}
-      ${cot ? `<dt>Total</dt><dd>${balboas(cot.total)} (incluye ITBMS de hospedaje ${balboas(cot.impuesto)})</dd><dt>Seña</dt><dd>${balboas(r.sena?.monto ?? cot.sena)} · ${r.sena?.estado === 'verificada' ? '<span class="insignia insignia--ok">Verificada</span>' : '<span class="insignia insignia--aviso">Por verificar</span>'}</dd>` : ''}
+      ${cot ? `<dt>Total</dt><dd>${balboas(cot.total)} (incluye ITBMS de hospedaje ${balboas(cot.impuesto)})</dd><dt>Depósito</dt><dd>${balboas(r.sena?.monto ?? cot.sena)} · ${r.sena?.estado === 'verificada' ? '<span class="insignia insignia--ok">Verificado</span>' : '<span class="insignia insignia--aviso">Por verificar</span>'}</dd>` : ''}
       ${r.uidExterno ? `<dt>UID</dt><dd><code style="font-size:0.75rem">${esc(r.uidExterno)}</code></dd>` : ''}
     </dl>
     <div class="resumen-errores" data-errores tabindex="-1" hidden style="margin-top:10px"></div>
     <div class="acciones" style="margin-top:14px">
-      ${r.sena && r.sena.estado !== 'verificada' ? '<button type="button" class="boton boton--primario" data-verificar>Marcar la seña como verificada</button>' : ''}
+      ${r.sena && r.sena.estado !== 'verificada' ? '<button type="button" class="boton boton--primario" data-verificar>Marcar el depósito como verificado</button>' : ''}
       ${['directo', 'bloqueo'].includes(r.canal) ? `<button type="button" class="boton boton--peligro" data-cancelar>${r.canal === 'bloqueo' ? 'Quitar el bloqueo' : 'Cancelar la reserva'}</button>` : `<p class="campo__ayuda">Para cancelarla, se hace en ${esc(canal.largo)}; aquí desaparece en la próxima sincronización.</p>`}
     </div></div>
     ${opcionesMover.length ? `<div class="bloque-dialogo"><h3>Mover a otra cabaña</h3><p class="campo__ayuda" style="margin-bottom:8px">Solo cabañas libres esas noches y de igual o mayor capacidad.</p>${opcionesMover.map((o) => `<div class="acciones" style="margin-bottom:6px"><span>De ${esc(cabanaDe(negocio, o.u).nombre)} a:</span>${o.libres.map((c) => `<button type="button" class="boton" data-mover-res="${r.id}|${o.u}|${c.id}">${esc(c.nombre)}</button>`).join('')}</div>`).join('')}</div>` : ''}`,
@@ -359,7 +364,7 @@ function abrirReserva(id) {
   d.addEventListener('click', async (ev) => {
     const errores = d.querySelector('[data-errores]');
     const fallo = (res) => { errores.hidden = false; errores.innerHTML = `<p>${esc(res.errores[0].mensaje)}</p>`; errores.focus(); };
-    if (ev.target.closest('[data-verificar]')) { operar((a, ahora) => verificarSena(a, id, ahora)); d.close(); anunciar('Seña verificada.'); }
+    if (ev.target.closest('[data-verificar]')) { operar((a, ahora) => verificarSena(a, id, ahora)); d.close(); anunciar('Depósito verificado.'); }
     if (ev.target.closest('[data-cancelar]')) {
       const ok = await confirmar({ titulo: r.canal === 'bloqueo' ? 'Quitar el bloqueo' : 'Cancelar la reserva', texto: `Las noches del ${esc(rangoTexto(r.llegada, r.salida))} vuelven a quedar libres en ${esc(nombres(r.unidades))}.`, si: r.canal === 'bloqueo' ? 'Quitar el bloqueo' : 'Cancelar la reserva', no: 'Volver', peligro: true });
       if (!ok) return;

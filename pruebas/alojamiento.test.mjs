@@ -4,6 +4,7 @@ import {
   nochesEntre, estanciasSolapan, validarReserva, cotizar, minimoNoches, detectarChoques, proponerReubicacion, moverUnidad,
   vigilar, actualizarSincronizaciones, disponiblesParaVenta, eventosParaExportar, sincronizarCanal, rangoTexto,
   crearReserva, cancelarReserva, simularCaida, simularReservaOta, activarCierre, reabrirVenta, cierreVigente, moverReserva, aplicarImportacion,
+  sincronizoDespuesDe, unidadesSinSincronizar,
 } from '../js/nucleo/alojamiento.mjs';
 import { semillaAlojamiento } from '../js/nucleo/semilla.mjs';
 import { msDeFecha, fechaISO } from '../js/nucleo/tiempo.mjs';
@@ -195,7 +196,7 @@ test('recorrido del vigilante: cae Booking → alerta → cierre preventivo → 
   assert.equal(cierreVigente(aloj).activo, false);
 });
 
-test('crear reservas: valida al escribir, calcula total con ITBMS y seña; un bloqueo no lleva huésped', () => {
+test('crear reservas: valida al escribir, calcula total con ITBMS y depósito; un bloqueo no lleva huésped', () => {
   const ahora = msDeFecha('2026-10-06', 10 * 60);
   const aloj = { reservas: [], canales: [], cierres: [] };
   const r = crearReserva(aloj, neg, { canal: 'directo', unidades: ['caoba'], llegada: '2026-10-20', salida: '2026-10-23', personas: 5, huesped: { nombre: 'Familia de ejemplo', telefono: '+50760000999', consentimiento: true } }, ahora, '2026-10-06');
@@ -219,6 +220,27 @@ test('importar un .ics de un canal cuenta como sincronización correcta', () => 
   simularCaida(aloj, 'airbnb', ahora);
   const r = aplicarImportacion(aloj, 'airbnb', 'corotu', [{ uid: 'nuevo@airbnb.com', inicio: '2026-10-25', fin: '2026-10-27', resumen: 'Reserved' }], ahora + 1000);
   assert.equal(r.nuevas.length, 1);
-  assert.equal(aloj.canales.find((c) => c.id === 'airbnb').ultimaSync, ahora + 1000);
-  assert.equal(vigilar(aloj.canales, ahora + 1000).find((x) => x.canalId === 'airbnb').vencido, false);
+  // una sola cabaña importada no pone al día a las otras tres: el canal sigue vencido (revisión del 3-oct)
+  const airbnb = aloj.canales.find((c) => c.id === 'airbnb');
+  assert.ok(airbnb.ultimaSync < ahora, 'el canal no puede quedar al día con una sola cabaña');
+  assert.equal(vigilar(aloj.canales, ahora + 1000).find((x) => x.canalId === 'airbnb').vencido, true);
+  assert.deepEqual(unidadesSinSincronizar(airbnb, ahora).sort(), ['caoba', 'guayacan', 'nance']);
+  // con las cuatro importadas, sí
+  for (const u of ['nance', 'guayacan', 'caoba']) aplicarImportacion(aloj, 'airbnb', u, [], ahora + 2000);
+  assert.equal(airbnb.ultimaSync, ahora + 1000);
+  assert.equal(vigilar(aloj.canales, ahora + 2000).find((x) => x.canalId === 'airbnb').vencido, false);
+  assert.deepEqual(unidadesSinSincronizar(airbnb, ahora), []);
+});
+
+test('con Booking caído y en cierre, importar una cabaña no dice que el canal volvió ni lo da por sincronizado', () => {
+  const ahora = msDeFecha('2026-10-06', 10 * 60);
+  const aloj = semillaAlojamiento(ahora);
+  simularCaida(aloj, 'booking', ahora);
+  activarCierre(aloj, 'booking', ahora);
+  const cierre = cierreVigente(aloj);
+  aplicarImportacion(aloj, 'booking', 'nance', [], ahora + HORA);
+  const booking = aloj.canales.find((c) => c.id === 'booking');
+  assert.equal(sincronizoDespuesDe(booking, aloj.cierres.find((x) => x.canalId === 'booking')), false);
+  assert.ok(cierre.unidades.includes('corotu'));
+  assert.deepEqual(unidadesSinSincronizar(booking, aloj.cierres[0].desde).sort(), ['corotu', 'cuipo', 'guayacan']);
 });

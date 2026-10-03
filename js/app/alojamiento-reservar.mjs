@@ -1,5 +1,5 @@
 // Motor de reservas directo del alojamiento: fechas y personas → cabañas disponibles (respeta el cierre preventivo)
-// → total con ITBMS de hospedaje → datos → seña por Yappy (simulada y rotulada).
+// → total con ITBMS de hospedaje → datos → depósito por Yappy (simulada y rotulada).
 
 import { esc, icono, $, mostrarErrores } from './ui.mjs';
 import { cargar, transaccion, alCambiar } from './almacen.mjs';
@@ -81,9 +81,9 @@ function htmlTotal() {
       ${c.lineas.map((l) => Object.entries(l.porTemporada).map(([t, x]) => `<tr><td>${esc(l.nombre)} · ${x.noches} ${x.noches === 1 ? 'noche' : 'noches'} × ${balboas(x.tarifa)} (temporada ${t})</td><td>${balboas(x.subtotal)}</td></tr>`).join('')).join('')}
       <tr><td>ITBMS de hospedaje, 10 % (<a href="https://dgi.mef.gob.pa/itbms/Generalidades" rel="noopener">DGI</a>)</td><td>${balboas(c.impuesto)}</td></tr>
       <tr class="total"><td>Total</td><td>${balboas(c.total)}</td></tr>
-      <tr class="sena"><td>Seña para apartar (${Math.round(negocio.sena * 100)} %)</td><td>${balboas(c.sena)}</td></tr>
+      <tr class="sena"><td>Depósito para apartar (${Math.round(negocio.sena * 100)} %)</td><td>${balboas(c.sena)}</td></tr>
     </tbody></table>
-    <p class="campo__ayuda" style="margin-top:6px">El resto (${balboas(c.total - c.sena)}) se paga al llegar. Precios y seña de ejemplo.</p>
+    <p class="campo__ayuda" style="margin-top:6px">El resto (${balboas(c.total - c.sena)}) se paga al llegar. Precios y depósito de ejemplo.</p>
     <button type="button" class="boton boton--primario boton--grande" style="margin-top:12px" data-continuar>Continuar con mis datos</button>
   </div>`;
 }
@@ -99,19 +99,19 @@ function htmlDatos() {
       <div class="campo"><label for="ad-correo">Correo <span class="campo__ayuda">(opcional)</span></label><input id="ad-correo" name="correo" type="email" autocomplete="email"></div>
       <div class="consentimiento campo"><label class="opcion"><input type="checkbox" name="consentimiento"> <span>Autorizo a ${esc(negocio.nombre)} a guardar mis datos para esta reserva y a escribirme por WhatsApp o correo sobre ella, según la Ley 81 de 2019 de protección de datos personales. Puedo retirar este permiso cuando quiera.</span></label></div>
       <p class="nota nota--relevo">Demo: escribe datos inventados. La reserva queda solo en este navegador.</p>
-      <div class="acciones"><button type="submit" class="boton boton--primario boton--grande">Ir a pagar la seña de ${balboas(c.sena)}</button><button type="button" class="boton boton--grande" data-volver>Cambiar fechas o cabañas</button></div>
+      <div class="acciones"><button type="submit" class="boton boton--primario boton--grande">Ir a pagar el depósito de ${balboas(c.sena)}</button><button type="button" class="boton boton--grande" data-volver>Cambiar fechas o cabañas</button></div>
     </form>`;
 }
 
 function htmlPago(huesped) {
   const c = cotizar(negocio, busqueda.elegidas, busqueda.llegada, busqueda.salida);
-  return `<h1>Paga la seña</h1>
+  return `<h1>Paga el depósito</h1>
     <p class="paciente__intro">${balboas(c.sena)} para apartar ${esc(busqueda.elegidas.map((id) => cabanaDe(negocio, id).nombre).join(', '))} del ${esc(rangoTexto(busqueda.llegada, busqueda.salida))}.</p>
     <div class="yappy">
       <p class="yappy__rotulo">Simulado: este QR y este directorio son de ejemplo y no cobran</p>
       <p>Paga por Yappy al directorio <strong>${esc(negocio.yappy)}</strong>, o escanea el código desde tu app de Yappy:</p>
       <div class="yappy__qr" role="img" aria-label="Código QR de ejemplo, no cobra" data-qr></div>
-      <p class="campo__ayuda">La seña queda «por verificar» hasta que el alojamiento la vea en su Yappy Comercial. Sin servidor no se puede confirmar el pago al momento: para eso hace falta el botón de pago de Yappy (pide un servidor que reciba el aviso del banco) o un enlace de pago de Tilopay con Yappy (2 %, mínimo US$0.30).</p>
+      <p class="campo__ayuda">El depósito queda «por verificar» hasta que el alojamiento lo vea en su Yappy Comercial. Sin servidor no se puede confirmar el pago al momento: para eso hace falta el botón de pago de Yappy (pide un servidor que reciba el aviso del banco) o un enlace de pago de Tilopay con Yappy (2 %, mínimo US$0.30).</p>
       <div class="acciones"><button type="button" class="boton boton--primario boton--grande" data-pague>Ya hice el pago</button><button type="button" class="boton boton--grande" data-volver-datos>Volver</button></div>
       <div class="resumen-errores" data-errores tabindex="-1" hidden></div>
     </div>`;
@@ -122,7 +122,7 @@ function htmlListo(r) {
     <div class="resultado resultado--ok" tabindex="-1">
       <p class="resultado__titulo">${icono('confirmada')} Te esperamos, ${esc(r.huesped.nombre.split(' ')[0])}</p>
       <p><strong>${esc(r.unidades.map((id) => cabanaDe(negocio, id).nombre).join(', '))}</strong>: llegas el ${esc(fechaLarga(r.llegada))} y sales el ${esc(fechaLarga(r.salida))}.</p>
-      <p>Total ${balboas(r.total)}; seña de ${balboas(r.sena.monto)} <strong>por verificar</strong>. Te escribimos por WhatsApp a ${esc(mostrarTelefono(r.huesped.telefono))} cuando la veamos, con las indicaciones para llegar.</p>
+      <p>Total ${balboas(r.total)}; depósito de ${balboas(r.sena.monto)} <strong>por verificar</strong>. Te escribimos por WhatsApp a ${esc(mostrarTelefono(r.huesped.telefono))} cuando la veamos, con las indicaciones para llegar.</p>
     </div>
     <p class="pie-paciente">¿Eres del alojamiento? Mírala en el <a href="alojamiento.html">calendario de cabañas</a>.</p>`;
 }

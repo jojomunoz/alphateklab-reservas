@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>alphateklab Reservas · citas con recordatorio y cabañas sin doble reserva</title>
+<title>alphateklab Reservas · citas con recordatorio y cabañas que avisan si un calendario deja de sincronizar</title>
 <meta name="description" content="Agenda de citas con recordatorios que insisten hasta tener respuesta, y calendario de cabañas que importa y exporta el iCal de Booking, Airbnb y Expedia, con vigilante de sincronización. Demo con negocios de ejemplo.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:title" content="alphateklab Reservas">
-<meta property="og:description" content="Citas con recordatorio por WhatsApp y cabañas sin doble reserva. Demo con negocios de ejemplo.">
+<meta property="og:description" content="Citas con recordatorio por WhatsApp y cabañas con un vigilante que avisa cuando Booking o Airbnb dejan de sincronizar. Demo con negocios de ejemplo.">
 <meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preload" href="fuentes/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -58,7 +58,7 @@
         <li>iCal de entrada y de salida, sin devolverle a cada canal sus propias reservas.</li>
         <li>Vigilante: si un canal pasa de 6 h sin sincronizar, alerta roja y cierre preventivo de la venta directa.</li>
         <li>Lista de choques con la cabaña libre a la que conviene mover la reserva.</li>
-        <li>Reserva directa con ITBMS de hospedaje y seña por Yappy.</li>
+        <li>Reserva directa con ITBMS de hospedaje y depósito por Yappy.</li>
       </ul>
       <div class="acciones">
         <a class="boton boton--primario" href="alojamiento.html">Abrir el calendario de cabañas</a>
@@ -111,7 +111,7 @@
         <li>Salen por WhatsApp Business API, con una plantilla de utilidad aprobada por Meta y botones de respuesta. Meta cobra por mensaje entregado: para Panamá, unos US$0.011 a 0.013 según tablas de terceros, a confirmar en la <a href="https://developers.facebook.com/docs/whatsapp/pricing" rel="noopener">tabla oficial</a>. Ese costo va aparte de la suscripción.</li>
         <li>El correo sirve de respaldo y casi no cuesta; el SMS (US$0.10 a 0.18 por segmento a Panamá) queda para el último intento.</li>
         <li>El servidor lee los iCal cada 15 a 30 minutos, porque desde el navegador no se puede (CORS). Para eliminar la doble reserva del todo hace falta un channel manager conectado por API.</li>
-        <li>La seña se cobra con un enlace de pago de Tilopay que acepta Yappy, o con el botón de pago de Yappy y un servidor que reciba el aviso del banco.</li>
+        <li>El depósito se cobra con un enlace de pago de Tilopay que acepta Yappy, o con el botón de pago de Yappy y un servidor que reciba el aviso del banco.</li>
         <li>Los datos personales siguen la Ley 81 de 2019 y el Decreto Ejecutivo 285 de 2021 (supervisa la ANTAI). Los de salud son sensibles: consentimiento expreso, trazable y revocable. GitHub Pages es solo para esta demo.</li>
       </ul>
       <p class="precio">Precio para tu negocio: a cotizar.</p>

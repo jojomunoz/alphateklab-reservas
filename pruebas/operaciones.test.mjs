@@ -205,10 +205,16 @@ test('autoagenda: registra o reconoce a la persona, crea la cita pendiente y no 
   // La misma persona otra vez: no se duplica.
   const r2 = solicitarCita(st, neg, { persona, servicioId: 'control', profesionalId: null, inicio: t('2026-10-09', '10:00') }, LUNES);
   assert.equal(r2.paciente.id, r.paciente.id);
-  // Cédula de otra persona con otro celular: no se dice de quién es.
+  // Cédula de otra persona con otro celular: se trata como una persona nueva (la respuesta es la misma que la de
+  // cualquier cédula nueva), queda «por verificar» con una tarea para recepción, y el registro existente no se toca.
+  const telAntes = p1.telefono;
   const r3 = solicitarCita(st, neg, { persona: { ...persona, cedula: p1.cedula }, servicioId: 'control', inicio: t('2026-10-09', '11:00') }, LUNES);
-  assert.equal(r3.ok, false);
-  assert.ok(!r3.errores[0].mensaje.includes(p1.nombre));
+  assert.equal(r3.ok, true);
+  assert.equal(r3.cita.estado, 'pendiente');
+  assert.notEqual(r3.paciente.id, p1.id);
+  assert.ok(r3.paciente.porVerificar);
+  assert.equal(p1.telefono, telAntes);
+  assert.ok(st.tareas.some((x) => x.citaId === r3.cita.id && /Verificar identidad/.test(x.motivo)));
   // Hora ocupada: no se guarda nada (ni la persona nueva).
   const antes = st.pacientes.length;
   const r4 = solicitarCita(st, neg, { persona: { nombre: 'Otra Nueva', cedula: '8-000-2002', telefono: '6000-0202', consentimiento: true }, servicioId: 'control', profesionalId: 'rios', inicio: t('2026-10-08', '10:00') }, LUNES);
