@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { semillaCitas, semillaAlojamiento, horaInicialDemo, azar } from '../js/nucleo/semilla.mjs';
 import { sinConfirmar, conInasistencias, porProfesional, costoMensajesDelMes, asistenciaDe, porcentaje } from '../js/nucleo/riesgo.mjs';
 import { NEGOCIOS_CITAS, NEGOCIO_ALOJAMIENTO } from '../js/nucleo/negocios.mjs';
-import { validarCita, siguienteMomentoAbierto } from '../js/nucleo/agenda.mjs';
+import { validarCita, siguienteMomentoAbierto, tramosDelDia } from '../js/nucleo/agenda.mjs';
 import { detectarChoques } from '../js/nucleo/alojamiento.mjs';
 import { msDeFecha, fechaISO, lunesDe, sumarDias, horaTexto, HORA } from '../js/nucleo/tiempo.mjs';
 import { normalizarTelefono } from '../js/nucleo/contacto.mjs';
@@ -11,9 +11,10 @@ import { normalizarTelefono } from '../js/nucleo/contacto.mjs';
 const AHORA = msDeFecha('2026-10-06', 10 * 60); // martes 6 de octubre, 10:00
 
 test('hora inicial de la demo: la real en horario; si no, el siguiente día hábil a las 8:30', () => {
-  assert.equal(horaInicialDemo(msDeFecha('2026-10-06', 10 * 60 + 7)), msDeFecha('2026-10-06', 10 * 60 + 15));
-  assert.equal(horaInicialDemo(msDeFecha('2026-10-03', 57)), msDeFecha('2026-10-03', 8 * 60 + 30), 'sábado a la 1 a. m. → sábado 8:30');
-  assert.equal(horaInicialDemo(msDeFecha('2026-10-03', 19 * 60)), msDeFecha('2026-10-05', 8 * 60 + 30), 'sábado de noche → lunes');
+  assert.equal(horaInicialDemo(msDeFecha('2026-10-06', 7 * 60 + 10)), msDeFecha('2026-10-06', 8 * 60 + 30), 'martes temprano → ese día a las 8:30');
+  assert.equal(horaInicialDemo(msDeFecha('2026-10-06', 10 * 60 + 7)), msDeFecha('2026-10-07', 8 * 60 + 30), 'martes a media mañana → miércoles 8:30');
+  assert.equal(horaInicialDemo(msDeFecha('2026-10-03', 57)), msDeFecha('2026-10-05', 8 * 60 + 30), 'sábado a la 1 a. m. → lunes 8:30');
+  assert.equal(horaInicialDemo(msDeFecha('2026-10-03', 16 * 60 + 45)), msDeFecha('2026-10-05', 8 * 60 + 30), 'sábado por la tarde → lunes (antes abría con todo cerrado)');
   assert.equal(horaInicialDemo(msDeFecha('2026-11-02', 18 * 60)), msDeFecha('2026-11-04', 8 * 60 + 30), 'salta el feriado del 3-nov');
 });
 
@@ -40,7 +41,12 @@ for (const [id, negocio] of Object.entries(NEGOCIOS_CITAS)) {
     }
     const lunes = lunesDe(fechaISO(AHORA));
     const enDosSemanas = st.citas.filter((c) => fechaISO(c.inicio) >= lunes && fechaISO(c.inicio) <= sumarDias(lunes, 13));
-    assert.ok(enDosSemanas.length >= 30 && enDosSemanas.length <= 50, `${enDosSemanas.length} citas en la semana actual y la siguiente`);
+    // Unas cuatro citas por profesional cada día que abre (una recepción con trabajo a la vista): entre 3 y 4,2 de
+    // promedio, porque a veces no queda hueco para la cuarta.
+    let diasAbiertos = 0;
+    for (let i = 0; i <= 13; i++) if (tramosDelDia(negocio, sumarDias(lunes, i)).length) diasAbiertos++;
+    const promedio = enDosSemanas.length / (diasAbiertos * negocio.profesionales.length);
+    assert.ok(promedio >= 3 && promedio <= 4.2, `${enDosSemanas.length} citas en ${diasAbiertos} días con ${negocio.profesionales.length} profesionales (${promedio.toFixed(2)} por profesional y día)`);
     const estados = new Set(st.citas.map((c) => c.estado));
     for (const e of ['pendiente', 'confirmada', 'atendida', 'no_asistio']) assert.ok(estados.has(e), `hay citas «${e}»`);
     assert.ok(st.citas.filter((c) => c.inicio > AHORA).every((c) => !['atendida', 'no_asistio'].includes(c.estado)), 'nada futuro está atendido');
@@ -92,4 +98,20 @@ test('semilla de alojamiento: 4 canales, un grupo de 3 cabañas y ningún choque
   assert.deepEqual(NEGOCIO_ALOJAMIENTO.cabanas.map((c) => c.nombre), ['Corotú', 'Nance', 'Guayacán', 'Espavé', 'Cuipo', 'Caoba']);
   assert.ok(a.canales.every((c) => AHORA - c.ultimaSync < 6 * HORA), 'todos al día al empezar');
   assert.ok(a.reservas.filter((r) => r.huesped).every((r) => /ejemplo/.test(r.huesped.nombre)));
+});
+
+test('la recepción abre con trabajo a la vista: sin confirmar, por llamar y alguien en la sala, cualquier día hábil', () => {
+  const negocio = NEGOCIOS_CITAS.consultorio;
+  for (let d = 0; d < 10; d++) {
+    const ahora = horaInicialDemo(msDeFecha(sumarDias('2026-10-03', d), 12 * 60));
+    const st = semillaCitas(negocio, ahora, { urlBase: 'https://ejemplo.test/confirmar.html', sala: 'abcdefghij' });
+    const hoy = fechaISO(ahora);
+    const enSala = st.citas.filter((c) => c.enSala && fechaISO(c.inicio) === hoy && !['atendida', 'no_asistio', 'cancelada'].includes(c.estado));
+    assert.ok(sinConfirmar(st, ahora).length >= 2, `${hoy}: sin confirmar`);
+    assert.ok(st.tareas.filter((t) => !t.hecha).length >= 1, `${hoy}: por llamar`);
+    assert.equal(enSala.length, 1, `${hoy}: en sala`);
+    // quien está en la sala tiene su cita confirmada y ningún mensaje por salir
+    assert.equal(enSala[0].estado, 'confirmada');
+    assert.ok(!st.envios.some((e) => e.citaId === enSala[0].id && e.estado === 'programado' && e.clase !== 'aviso'));
+  }
 });

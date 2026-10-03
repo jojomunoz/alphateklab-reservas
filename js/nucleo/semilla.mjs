@@ -3,7 +3,7 @@
 // Las citas se colocan con el mismo generador de huecos que usa la recepción, así que nunca se pisan, y su
 // historial de mensajes sale del mismo planificador de recordatorios.
 
-import { MIN, HORA, DIA, fechaISO, msDeFecha, sumarDias, lunesDe, diaSemana, partes, redondearArriba, diferenciaDias } from './tiempo.mjs';
+import { MIN, HORA, DIA, fechaISO, msDeFecha, sumarDias, lunesDe, diaSemana, partes, diferenciaDias } from './tiempo.mjs';
 import { feriado } from './feriados.mjs';
 import { huecosDelDia, tramosDelDia, siguienteMomentoAbierto } from './agenda.mjs';
 import { planificar, VENTANA } from './recordatorios.mjs';
@@ -26,16 +26,16 @@ export function azar(semilla) {
 }
 
 /**
- * Hora con la que arranca el reloj de la demo: la real si es de lunes a sábado entre 8:00 y 17:00 (Panamá);
- * si no, el siguiente día hábil a las 8:30, para que la agenda abra con gente.
+ * Hora con la que arranca el reloj de la demo: siempre un día de lunes a viernes a las 8:30 (Panamá), hoy si todavía
+ * no son las 8:30 y si no el siguiente día hábil. Con la hora real, un sábado por la tarde abría la recepción con el
+ * consultorio cerrado y los tres paneles en cero (revisión del 3-oct).
  */
 export function horaInicialDemo(real) {
+  const habil = (d) => ![0, 6].includes(diaSemana(d)) && !feriado(d);
   const p = partes(real);
-  const iso = fechaISO(real);
-  const min = p.hora * 60 + p.minuto;
-  if (p.diaSemana !== 0 && !feriado(iso) && min >= 480 && min < 1020) return redondearArriba(real, 15);
-  let dia = min >= 1020 || p.diaSemana === 0 || feriado(iso) ? sumarDias(iso, 1) : iso;
-  while (diaSemana(dia) === 0 || feriado(dia)) dia = sumarDias(dia, 1);
+  let dia = fechaISO(real);
+  if (!habil(dia) || p.hora * 60 + p.minuto >= 8 * 60 + 30) dia = sumarDias(dia, 1);
+  while (!habil(dia)) dia = sumarDias(dia, 1);
   return msDeFecha(dia, 8 * 60 + 30);
 }
 
@@ -76,6 +76,10 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
 
   const hoy = fechaISO(ahora);
   const lunes = lunesDe(hoy);
+  let paraSala = null; // la cita de quien estará en la sala de espera
+  // solo si el negocio ya está abierto a esa hora (la barbería abre a las 9:00: nadie espera adentro a las 8:30)
+  const minAhora = partes(ahora).hora * 60 + partes(ahora).minuto;
+  const abiertoAlEmpezar = tramosDelDia(negocio, hoy).some(([a, b]) => minAhora >= a && minAhora < b);
   const desde = sumarDias(lunes, -14), hasta = sumarDias(lunes, 13);
   const n = diferenciaDias(desde, hasta);
 
@@ -83,14 +87,19 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
     const fecha = sumarDias(desde, i);
     if (!tramosDelDia(negocio, fecha).length) continue;
     const esActual = fecha >= lunes;
-    // Unas 40 citas entre esta semana y la siguiente (11 días hábiles); menos en las dos anteriores (historial).
-    const objetivo = esActual ? 40 / (negocio.profesionales.length * 11) : 0.6;
+    // Unas cuatro citas por profesional cada día de esta semana y la siguiente (una recepción con trabajo a la vista);
+    // menos en las dos anteriores (historial).
+    const objetivo = esActual ? 4 : 0.6;
     const usadosHoy = new Set();
-    for (const prof of negocio.profesionales) {
+    for (const [iProf, prof] of negocio.profesionales.entries()) {
       const porProf = Math.floor(objetivo) + (r() < objetivo % 1 ? 1 : 0);
       for (let k = 0; k < porProf; k++) {
         const servicio = r.uno(negocio.servicios);
-        const huecos = huecosDelDia({ negocio, citas: st.citas, fecha, servicioId: servicio.id, profesionalId: prof.id, ahora: 0 });
+        let huecos = huecosDelDia({ negocio, citas: st.citas, fecha, servicioId: servicio.id, profesionalId: prof.id, ahora: 0 });
+        // La primera del día de la demo, con el primer profesional, empieza entre 10 y 40 minutos después de abrir la
+        // demo: es quien está en la sala de espera (ver más abajo).
+        const deSala = fecha === hoy && iProf === 0 && k === 0 && abiertoAlEmpezar;
+        if (deSala) huecos = huecos.filter((x) => x.inicio >= ahora + 10 * MIN && x.inicio <= ahora + 40 * MIN);
         if (!huecos.length) continue;
         const h = huecos[r.entero(0, huecos.length - 1)];
         // Nadie tiene dos citas el mismo día (así nunca hay dos citas de la misma persona a la vez).
@@ -99,8 +108,9 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
         const paciente = r.uno(libres);
         usadosHoy.add(paciente.id);
         const creada = Math.min(h.inicio - r.entero(2, 9) * DIA + 2 * HORA, ahora - HORA);
+        if (deSala) paraSala = idSemilla('c');
         st.citas.push({
-          id: idSemilla('c'), pacienteId: paciente.id, servicioId: servicio.id, profesionalId: h.profesionalId, salaId: h.salaId,
+          id: deSala ? paraSala : idSemilla('c'), pacienteId: paciente.id, servicioId: servicio.id, profesionalId: h.profesionalId, salaId: h.salaId,
           inicio: h.inicio, fin: h.fin, estado: 'pendiente', origen: r() < 0.2 ? 'autoagenda' : 'recepcion',
           regla: { ...st.regla, dias: [...st.regla.dias] }, creada, historial: [{ t: creada, texto: 'Agendada en recepción' }],
           respuesta: null, confirmadaEn: null, enSala: null,
@@ -123,6 +133,8 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
       const falta = faltonas.has(c.pacienteId) ? x < 0.55 : x < 0.1;
       destino = falta ? 'no_asistio' : x > 0.93 ? 'cancelada' : 'atendida';
       if (destino !== 'no_asistio' && mensajes.length) respuesta = mensajes[0].momento + r.entero(10, 200) * MIN;
+    } else if (c.id === paraSala) {
+      destino = x < 0.5 ? 'confirmada' : 'pendiente'; // ni cancelada ni movida: es quien llega
     } else {
       const cerca = c.inicio - ahora < 2 * DIA;
       if (x < (cerca ? 0.42 : 0.3)) destino = 'confirmada';
@@ -196,6 +208,25 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
     }
     // Quien está ahora mismo en la sala de espera.
     if (destino === 'confirmada' && c.inicio - ahora <= 20 * MIN && c.inicio - ahora >= -10 * MIN) c.enSala = ahora - 6 * MIN;
+  }
+  // Alguien en la sala de espera al abrir la demo: la primera cita de hoy que empieza en los próximos 40 minutos. Si
+  // estaba sin confirmar, confirmó al llegar: sus mensajes pendientes se detienen y su llamada queda hecha.
+  const hoyISO = fechaISO(ahora);
+  if (!st.citas.some((c) => c.enSala && fechaISO(c.inicio) === hoyISO)) {
+    const llega = st.citas
+      .filter((c) => fechaISO(c.inicio) === hoyISO && ['confirmada', 'pendiente'].includes(c.estado) && c.inicio >= ahora - 10 * MIN && c.inicio <= ahora + 40 * MIN)
+      .sort((a, b) => a.inicio - b.inicio)[0];
+    if (llega) {
+      const t = ahora - 6 * MIN;
+      if (llega.estado === 'pendiente') {
+        llega.estado = 'confirmada';
+        llega.confirmadaEn = t;
+        llega.historial.push({ t, texto: 'Confirmó al llegar, en recepción' });
+        for (const e of st.envios) if (e.citaId === llega.id && e.estado === 'programado') Object.assign(e, { estado: 'cancelado', canceladoEn: t, motivoCancelacion: 'la cita se confirmó en recepción' });
+        for (const tarea of st.tareas) if (tarea.citaId === llega.id && !tarea.hecha) tarea.hecha = { t, resultado: 'confirmo' };
+      }
+      llega.enSala = t;
+    }
   }
   // Una cita que ya empezó no se confirma por teléfono: sus tareas quedan cerradas (como al adelantar el reloj).
   for (const t of st.tareas) {
