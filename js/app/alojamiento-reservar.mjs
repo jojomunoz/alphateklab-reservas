@@ -66,7 +66,7 @@ function htmlResultados() {
         const cot = cotizar(negocio, [c.id], busqueda.llegada, busqueda.salida);
         return `<label class="cabana-opcion"><input type="checkbox" name="cabana" value="${c.id}"${busqueda.elegidas.includes(c.id) ? ' checked' : ''}><span><strong>${esc(c.nombre)}</strong><small>Hasta ${c.capacidad} personas</small></span><span class="cabana-opcion__precio">${balboas(cot.subtotal)}<small><br>${noches} ${noches === 1 ? 'noche' : 'noches'}, sin ITBMS</small></span></label>`;
       }).join('')}</div>
-      <p class="campo__ayuda" style="margin-top:8px" aria-live="polite">Capacidad elegida: <strong>${capElegida}</strong> de ${busqueda.personas} ${busqueda.personas === 1 ? 'persona' : 'personas'}.</p>`;
+      <p class="campo__ayuda" style="margin-top:8px" aria-live="polite">Capacidad elegida: <strong>${capElegida}</strong> ${capElegida === 1 ? 'lugar' : 'lugares'} para ${busqueda.personas} ${busqueda.personas === 1 ? 'persona' : 'personas'}${capElegida < busqueda.personas ? `: faltan ${busqueda.personas - capElegida}` : ''}.</p>`;
     if (v.enCierre.length) html += `<p class="nota" style="margin-top:10px">${v.enCierre.length === 1 ? 'Una cabaña no se puede' : `${v.enCierre.length} cabañas no se pueden`} reservar en línea en este momento. Para esas, escríbenos por WhatsApp.</p>`;
     if (busqueda.elegidas.length && capElegida >= busqueda.personas) html += htmlTotal();
   }
@@ -158,7 +158,7 @@ main.addEventListener('submit', (ev) => {
     busqueda.personas = +form.elements.personas.value;
     busqueda.elegidas = [];
     const e = validarBusqueda();
-    if (e.length) { mostrarErrores(form, e); main.querySelector('[data-resultados]').innerHTML = ''; return; }
+    if (e.length) { mostrarErrores(form, e, { titulo: e.length === 1 ? 'Revisa las fechas:' : 'Revisa esto:' }); main.querySelector('[data-resultados]').innerHTML = ''; return; }
     busqueda.buscado = true;
     mostrarErrores(form, []);
     main.querySelector('[data-resultados]').innerHTML = htmlResultados();
@@ -175,7 +175,7 @@ main.addEventListener('submit', (ev) => {
     const correo = validarCorreo(f.correo.value);
     if (!correo.ok) e.push({ campo: 'correo', mensaje: correo.error });
     if (!f.consentimiento.checked) e.push({ campo: 'consentimiento', mensaje: 'Marca la casilla para que podamos guardar tu reserva.' });
-    if (e.length) { mostrarErrores(form, e); return; }
+    if (e.length) { mostrarErrores(form, e, { titulo: e.length === 1 ? 'Revisa tus datos:' : 'Revisa tus datos, por esto:' }); return; }
     huespedPendiente = { nombre: f.nombre.value.trim(), telefono: tel.e164, correo: correo.valor, consentimiento: true, canalConsentimiento: 'en la página de reservas' };
     paso = 'pago';
     pintar();

@@ -11,15 +11,16 @@
 .simulador .acciones .boton { font-size: 0.875rem; }
 
 /* ── Tape chart ─────────────────────────────────────────────────────── */
-.ocupacion-scroll { overflow-x: auto; border: 1px solid var(--linea); background: var(--superficie); overscroll-behavior-x: contain; container-type: inline-size; }
+/* scroll-padding-left = la columna de cabañas pegajosa: al tabular, la barra enfocada no queda debajo de ella. */
+.ocupacion-scroll { overflow-x: auto; border: 1px solid var(--linea); background: var(--superficie); overscroll-behavior-x: contain; container-type: inline-size; scroll-padding-left: 118px; }
 /* La noche mide al menos 46 px; si sobra ancho, las columnas crecen para llenar (unidades de contenedor). */
 .ocupacion { --col-nombre: 118px; --noche: max(46px, calc((100cqi - var(--col-nombre) - 1px) / var(--noches))); min-width: calc(var(--col-nombre) + var(--noches) * var(--noche)); }
-@media (max-width: 599px) { .ocupacion { --col-nombre: 92px; } .ocu-nombre small { display: none; } }
+@media (max-width: 599px) { .ocupacion { --col-nombre: 92px; } .ocupacion-scroll { scroll-padding-left: 92px; } .ocu-nombre small { display: none; } }
 .ocu-fila { display: grid; grid-template-columns: var(--col-nombre) repeat(var(--noches), var(--noche)); grid-auto-rows: minmax(40px, auto); border-bottom: 1px solid var(--linea); position: relative; }
 .ocu-fila:last-child { border-bottom: 0; }
 .ocu-cabeza { position: sticky; top: 0; z-index: 3; background: var(--superficie); border-bottom: 1px solid var(--linea-fuerte); grid-auto-rows: auto; }
 .ocu-nombre { grid-column: 1; grid-row: 1 / -1; position: sticky; left: 0; z-index: 2; background: var(--superficie); border-right: 1px solid var(--linea-fuerte); padding: 6px 10px; display: flex; flex-direction: column; justify-content: center; line-height: 1.2; min-height: 44px; }
-.ocu-nombre strong { font-family: var(--f-titulo); font-weight: var(--peso-titulo); font-size: 0.9375rem; }
+.ocu-nombre strong { font-family: var(--f-titulo); font-weight: var(--peso-titulo); word-spacing: var(--espacio-titulo); font-size: 0.9375rem; }
 .ocu-nombre small { font-size: 0.75rem; color: var(--tinta-3); }
 .ocu-nombre .insignia { margin-top: 3px; font-size: 0.6875rem; padding: 1px 4px; align-self: flex-start; }
 .ocu-dia { grid-row: 1; font-size: 0.75rem; text-align: center; padding: 4px 0; line-height: 1.15; color: var(--tinta-2); border-left: 1px solid var(--linea); font-variant-numeric: tabular-nums; }
@@ -67,13 +68,24 @@
 .choque__titulo .ico { color: var(--peligro); }
 .choque__pares { display: grid; gap: 4px; font-size: 0.9375rem; }
 .propuesta { background: var(--superficie-2); padding: 10px 12px; display: grid; gap: 8px; font-size: 0.9375rem; }
+.propuesta__riesgo { display: flex; gap: 8px; align-items: flex-start; color: var(--tinta); font-size: 0.875rem; }
+.propuesta__riesgo .ico { color: var(--aviso); margin-top: 3px; }
 
 /* ── Canales ────────────────────────────────────────────────────────── */
 .semaforo { display: inline-flex; gap: 6px; align-items: center; font-weight: 700; font-size: 0.875rem; }
 .semaforo::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); }
 .semaforo--vencido { color: var(--peligro); }
 .semaforo--vencido::before { background: var(--peligro); border-radius: 1px; transform: rotate(45deg); }
-.semaforo--al-dia { color: var(--ok); }
+.semaforo--al_dia { color: var(--ok); }
+.semaforo--retrasado { color: var(--aviso); }
+.semaforo--retrasado::before { background: var(--aviso); border-radius: 1px; }
+/* Desplegable con su marca: con display flex el <summary> pierde el triángulo del navegador. */
+.desplegable > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-weight: 600; color: var(--primario-texto); text-align: left; }
+.desplegable > summary::-webkit-details-marker { display: none; }
+.desplegable__marca { flex: none; transition: transform var(--dur-estado) var(--ease-salida); }
+.desplegable[open] .desplegable__marca { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .desplegable__marca { transition: none; } }
+@media (hover: hover) and (pointer: fine) { .desplegable > summary:hover { text-decoration: underline; } }
 .canal { padding: 12px 16px; display: grid; gap: 10px; }
 .canal + .canal { border-top: 1px solid var(--linea); }
 .canal__cabeza { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; justify-content: space-between; }
@@ -90,6 +102,8 @@
 .mensaje-import { font-size: 0.875rem; padding: 8px 10px; }
 .mensaje-import--error { background: var(--peligro-fondo); color: var(--tinta); }
 .mensaje-import--ok { background: var(--ok-fondo); color: var(--tinta); }
+.mensaje-import p + p { margin-top: 6px; }
+.mensaje-import__quitar { display: flex; gap: 6px; align-items: flex-start; }
 .export-filas { display: grid; gap: 6px; }
 .export-fila { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--linea); font-size: 0.9375rem; }
 .export-fila code { font-size: 0.75rem; color: var(--tinta-3); overflow-wrap: anywhere; }
@@ -99,13 +113,15 @@
 .eventos-leidos li { padding: 4px 0; border-bottom: 1px solid var(--linea); font-variant-numeric: tabular-nums; }
 
 /* ── Reserva directa (huésped) ──────────────────────────────────────── */
-.buscar-fechas { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+/* align-items: start: un error de varias líneas en «Salida» no baja «Llegada». minmax(0, 1fr): a 320 px caben. */
+.buscar-fechas { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+.buscar-fechas input[type="date"] { min-width: 0; }
 .buscar-fechas .campo:last-of-type { grid-column: span 1; }
 .buscar-fechas .boton { grid-column: 1 / -1; }
 .cabana-opcion { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center; min-height: 64px; padding: 12px 14px; border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); cursor: pointer; }
 .cabana-opcion:has(input:checked) { border-color: var(--primario); box-shadow: inset 0 0 0 1px var(--primario); background: var(--primario-suave); }
 .cabana-opcion:has(input:focus-visible) { outline: 2px solid var(--foco); outline-offset: 2px; }
-.cabana-opcion strong { font-family: var(--f-titulo); font-size: 1.0625rem; }
+.cabana-opcion strong { font-family: var(--f-titulo); word-spacing: var(--espacio-titulo); font-size: 1.0625rem; }
 .cabana-opcion small { display: block; color: var(--tinta-3); font-size: 0.8125rem; }
 .cabana-opcion__precio { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .cabana-opcion__precio small { font-weight: 500; }

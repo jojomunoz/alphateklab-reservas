@@ -9,6 +9,7 @@ import {
   CANALES_ALOJ, activa, cabanaDe, rangoTexto, temporadaDe, minimoNoches, cotizar, detectarChoques, proponerReubicacion, vigilar,
   eventosParaExportar, crearReserva, cancelarReserva, verificarSena, moverReserva, simularCaida, restablecerCanal, simularReservaOta,
   activarCierre, reabrirVenta, cierreVigente, aplicarImportacion, nochesEntre, MAX_HORAS_POR_DEFECTO,
+  sincronizoDespuesDe, unidadesEnRiesgo, previsualizarImportacion,
 } from '../nucleo/alojamiento.mjs';
 import { exportarCalendario, importarCalendario } from '../nucleo/ical.mjs';
 import { balboas } from '../nucleo/mensajes.mjs';
@@ -27,6 +28,7 @@ const nombres = (ids) => {
   return n.length > 1 ? `${n.slice(0, -1).join(', ')} y ${n.at(-1)}` : n[0] || '';
 };
 const etiquetaReserva = (r) => r.canal === 'directo' ? `Directo · ${r.huesped?.nombre?.replace(/\s*\(ejemplo\)/, '') || ''}` : r.canal === 'bloqueo' ? `Bloqueo${r.nota ? ` · ${r.nota}` : ''}` : CANALES_ALOJ[r.canal].nombre;
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
 // ── Encabezado ────────────────────────────────────────────────────────
 
@@ -60,9 +62,14 @@ function htmlAlertas() {
   }
   for (const c of cierre.cierres) {
     const canal = aloj.canales.find((x) => x.id === c.canalId);
-    const sigue = vencidos.some((v) => v.canalId === c.canalId);
+    const v = canal ? vigilar([canal], ahora)[0] : null;
+    // Se dice el hecho: cuándo fue la última sincronización y contra qué máximo. «Volvió a sincronizar» solo si
+    // sincronizó después del cierre (subir el máximo apaga la alerta, pero no arregla el canal).
+    const hecho = !canal ? ''
+      : sincronizoDespuesDe(canal, c) ? `${canal.nombre} volvió a sincronizar el ${fechaCorta(canal.ultimaSync)} a las ${horaTexto(canal.ultimaSync)}: revisa los choques y reabre.`
+        : `${canal.nombre} no sincroniza desde el ${fechaCorta(canal.ultimaSync)} a las ${horaTexto(canal.ultimaSync)} (${haceTexto(canal.ultimaSync, ahora)}${v.vencido ? `; el máximo es ${v.max} h` : `; dentro del máximo de ${v.max} h, pero todavía no volvió`}).`;
     html += `<div class="cierre-activo"><p class="cierre-activo__titulo">${icono('candado')} Venta directa cerrada en ${esc(nombres(c.unidades))}</p>
-      <p>Desde el ${esc(fechaCorta(c.desde))} a las ${esc(horaTexto(c.desde))}, por ${esc(canal ? canal.nombre : c.canalId)}. La página del huésped no ofrece esas cabañas.${sigue ? ` ${esc(canal.nombre)} sigue sin sincronizar.` : ` ${esc(canal ? canal.nombre : '')} ya sincroniza.`}</p>
+      <p>Desde el ${esc(fechaCorta(c.desde))} a las ${esc(horaTexto(c.desde))}, por ${esc(canal ? canal.nombre : c.canalId)}. La página del huésped no ofrece esas cabañas. ${esc(hecho)}</p>
       <div class="acciones"><button type="button" class="boton" data-reabrir="${c.canalId}">Reabrir la venta directa</button><a class="boton" href="alojamiento-reservar.html">Ver la página del huésped</a></div></div>`;
   }
   if (choques.length) {
@@ -103,7 +110,7 @@ function htmlCalendario() {
     const L = Math.max(1, ...conCarril.map((x) => x.carril));
     const cerrada = cierre.unidades.includes(c.id);
     html += `<div class="ocu-fila" role="row" style="--carriles:${L}">
-      <div class="ocu-nombre" role="rowheader" style="grid-row:1 / span ${L}"><strong>${esc(c.nombre)}</strong><small>${c.capacidad} personas · ${balboas(c.tarifa.baja * 100)}</small>${cerrada ? `<span class="insignia insignia--aviso">${icono('candado')} Venta directa cerrada</span>` : ''}</div>
+      <div class="ocu-nombre" role="rowheader" style="grid-row:1 / span ${L}"><strong>${esc(c.nombre)}</strong><small>${c.capacidad} personas · ${balboas(c.tarifa[temporadaDe(negocio, desde)] * 100)} la noche</small>${cerrada ? `<span class="insignia insignia--aviso">${icono('candado')} Venta directa cerrada</span>` : ''}</div>
       ${dias.map((f, i) => `<span class="ocu-celda${finde(f) ? ' ocu-celda--finde' : ''}${f === hoy ? ' ocu-celda--hoy' : ''}${cerrada && f >= hoy ? ' ocu-celda--cerrada' : ''}" style="grid-column:${i + 2};grid-row:1 / span ${L}" data-celda="${c.id}|${f}" aria-hidden="true"></span>`).join('')}
       ${conCarril.map(({ r, carril }) => {
         const s = Math.max(0, diferenciaDias(desde, r.llegada));
@@ -151,24 +158,30 @@ function htmlSeccionCalendario() {
     <div class="leyenda-canales" aria-label="Canales">
       ${['directo', 'airbnb', 'booking', 'expedia', 'bloqueo'].map((k) => `<span><span class="muestra-canal barra-res--${k}"></span>${esc(CANALES_ALOJ[k].largo)}</span>`).join('')}
       <span><span class="muestra-canal" style="background:var(--aviso);height:3px;vertical-align:4px"></span>Temporada alta (dic-abr)</span>
+      <span>Tarifa de cada cabaña: la noche en temporada ${temporadaDe(negocio, vista.desde)}</span>
     </div>`;
 }
 
 // ── Choques ───────────────────────────────────────────────────────────
 
 function htmlChoques() {
-  const { aloj } = datos();
+  const { aloj, ahora } = datos();
   const choques = detectarChoques(aloj.reservas);
+  const riesgo = unidadesEnRiesgo(aloj, ahora);
   const quien = (r) => r.canal === 'directo' ? `reserva directa de ${r.huesped?.nombre || 'un huésped'}` : r.canal === 'bloqueo' ? 'Bloqueo manual' : `Reserva de ${CANALES_ALOJ[r.canal].largo} (el iCal no trae el nombre)`;
+  // El botón dice qué reserva mueve: las dos opciones de un choque pueden terminar en la misma cabaña.
+  const cual = (r) => r.canal === 'directo' ? `la de ${(r.huesped?.nombre || 'el huésped').replace(/\s*\(ejemplo\)/, '')}` : r.canal === 'bloqueo' ? 'el bloqueo' : `la de ${CANALES_ALOJ[r.canal].largo}`;
+  const porQueRiesgo = (c) => cierreVigente(aloj).unidades.includes(c.id) ? 'tiene la venta directa cerrada' : 'está conectada a un canal que no sincroniza';
   const propuesta = (r, u, etiqueta) => {
-    const libres = proponerReubicacion(negocio, aloj.reservas, r, u);
+    const libres = proponerReubicacion(negocio, aloj.reservas, r, u, { riesgo });
     if (!libres.length) {
       const tel = r.huesped?.telefono;
       return `<div class="propuesta"><p><strong>${esc(etiqueta)}:</strong> sin cabaña libre de igual o mayor capacidad esas noches. Contactar al huésped${r.canal !== 'directo' && r.canal !== 'bloqueo' ? ` por ${esc(CANALES_ALOJ[r.canal].largo)}` : ''}.</p>${tel ? `<div class="acciones"><a class="boton" href="tel:${esc(tel)}">${icono('llamar')} Llamar</a></div>` : ''}</div>`;
     }
     const c = libres[0];
-    return `<div class="propuesta"><p><strong>${esc(etiqueta)}:</strong> mover a ${esc(c.nombre)} (${c.capacidad} personas), libre del ${esc(rangoTexto(r.llegada, r.salida))}.${libres.length > 1 ? ` También: ${esc(libres.slice(1).map((x) => x.nombre).join(', '))}.` : ''}</p>
-      <div class="acciones"><button type="button" class="boton boton--primario" data-mover-res="${r.id}|${u}|${c.id}" aria-label="Mover la ${esc(r.canal === 'directo' ? 'reserva directa' : `reserva de ${CANALES_ALOJ[r.canal].largo}`)} a ${esc(c.nombre)}">Mover a ${esc(c.nombre)}</button></div></div>`;
+    const aviso = c.riesgo ? `<p class="propuesta__riesgo">${icono('aviso')} ${esc(c.nombre)} ${esc(porQueRiesgo(c))}: allá podrían venderla esas noches. Si puedes, ciérrala también en el extranet.</p>` : '';
+    return `<div class="propuesta"><p><strong>${esc(etiqueta)}:</strong> mover ${esc(cual(r))} a ${esc(c.nombre)} (${c.capacidad} personas), libre del ${esc(rangoTexto(r.llegada, r.salida))}.${libres.length > 1 ? ` También: ${esc(libres.slice(1).map((x) => x.nombre + (x.riesgo ? ' (en riesgo)' : '')).join(', '))}.` : ''}</p>${aviso}
+      <div class="acciones"><button type="button" class="boton${etiqueta === 'Propuesta' ? ' boton--primario' : ''}" data-mover-res="${r.id}|${u}|${c.id}">Mover ${esc(cual(r))} a ${esc(c.nombre)}</button></div></div>`;
   };
   return `
     <div class="seccion__cabeza"><h2 id="t-ch">Choques</h2><p>Dos reservas en la misma cabaña y noche. Se propone mover primero la que entró después.</p></div>
@@ -212,16 +225,16 @@ function htmlCanales() {
       ${aloj.canales.map((c) => {
         const v = estados.find((x) => x.canalId === c.id);
         return `<section class="canal" aria-labelledby="canal-${c.id}">
-          <div class="canal__cabeza"><h3 id="canal-${c.id}">${esc(c.nombre)}</h3><span class="semaforo ${v.vencido ? 'semaforo--vencido' : 'semaforo--al-dia'}">${v.vencido ? `Atrasado: ${Math.floor(v.horas)} h sin sincronizar` : 'Al día'}</span></div>
+          <div class="canal__cabeza"><h3 id="canal-${c.id}">${esc(c.nombre)}</h3><span class="semaforo semaforo--${v.estado}">${v.estado === 'vencido' ? `Atrasado: ${Math.floor(v.horas)} h sin sincronizar (máximo ${v.max} h)` : v.estado === 'retrasado' ? `${Math.floor(v.horas)} h sin sincronizar, dentro del máximo de ${v.max} h` : 'Al día'}</span></div>
           <div class="canal__datos">
             <span>Última sincronización correcta: <strong>${esc(fechaCorta(c.ultimaSync))}, ${esc(horaTexto(c.ultimaSync))}</strong> (${esc(haceTexto(c.ultimaSync, ahora))})</span>
             <label>Máximo permitido <select data-max="${c.id}">${[2, 3, 4, 6, 8, 12, 24].map((h) => `<option value="${h}"${h === (c.maxHoras || MAX_HORAS_POR_DEFECTO) ? ' selected' : ''}>${h} h</option>`).join('')}</select></label>
-            <span>Relee cada ~${c.intervaloHoras} h${c.caido ? ' · <strong>caído (simulado)</strong>' : ''}</span>
+            <span>${c.intervaloConFuente === false ? `Cada cuánto relee: sin confirmar (en la demo, cada ${c.intervaloHoras} h)` : `Relee cada ~${c.intervaloHoras} h`}${c.caido ? ' · <strong>caído (simulado)</strong>' : ''}</span>
           </div>
-          <details><summary class="boton boton--plano" style="justify-content:flex-start">Calendarios que se importan de ${esc(c.nombre)} (${Object.keys(c.urls).length} cabañas)</summary>
+          <details class="desplegable"><summary>${icono('der', 'desplegable__marca')} Calendarios que se importan de ${esc(c.nombre)} (${plural(Object.keys(c.urls).length, 'cabaña', 'cabañas')})</summary>
             <div class="import-filas">${Object.entries(c.urls).map(([u, url]) => `
               <div class="import-fila" data-import="${c.id}|${u}">
-                <div class="import-fila__cabeza"><strong>${esc(cabanaDe(negocio, u).nombre)}</strong><span class="campo__ayuda">${aloj.reservas.filter((r) => activa(r) && r.canal === c.id && r.unidades.includes(u)).length} reservas de ${esc(c.nombre)}</span></div>
+                <div class="import-fila__cabeza"><strong>${esc(cabanaDe(negocio, u).nombre)}</strong><span class="campo__ayuda">${plural(aloj.reservas.filter((r) => activa(r) && r.canal === c.id && r.unidades.includes(u)).length, 'reserva', 'reservas')} de ${esc(c.nombre)}</span></div>
                 <div class="import-fila__url"><label class="sr-only" for="url-${c.id}-${u}">URL del calendario de ${esc(c.nombre)} para ${esc(cabanaDe(negocio, u).nombre)}</label><input id="url-${c.id}-${u}" type="url" value="${esc(url)}" data-url><button type="button" class="boton" data-leer-url>Leer la URL</button></div>
                 <div class="acciones"><label class="boton" style="cursor:pointer">Subir el .ics<input type="file" accept=".ics,text/calendar" data-archivo class="sr-only"></label><button type="button" class="boton" data-pegar>Pegar el contenido</button></div>
                 <div data-mensaje></div>
@@ -308,7 +321,8 @@ function abrirNuevaReserva(preset = {}) {
       huesped: directo ? { nombre: f.nombre.value, telefono: f.telefono.value.trim() ? normalizarTelefono(f.telefono.value).e164 : '', consentimiento: f.consentimiento.checked, canalConsentimiento: 'por teléfono' } : null,
       sena: { estado: f.sena.value }, ignorarMinimo: f.ignorarMinimo.checked,
     }, ahora, hoy2));
-    if (!r.ok) { mostrarErrores(form, r.errores); return; }
+    const CAMPO = { unidades: 'unidades', choque: 'unidades', fechas: 'llegada', pasado: 'llegada', minimo: 'salida', capacidad: 'personas', cierre: 'unidades' };
+    if (!r.ok) { mostrarErrores(form, r.errores.map((e) => (e.campo || !CAMPO[e.codigo] ? e : { ...e, campo: CAMPO[e.codigo] }))); return; }
     recienCreada = r.reserva.id;
     d.close();
     anunciar(directo ? `Reserva guardada: ${nombres(r.reserva.unidades)}, ${rangoTexto(r.reserva.llegada, r.reserva.salida)}.` : `Bloqueo guardado: ${nombres(r.reserva.unidades)}.`);
@@ -387,13 +401,22 @@ function revisarImportacion(cont, canalId, unidadId, texto, alAplicar) {
   }
   const { aloj } = datos();
   const canal = aloj.canales.find((c) => c.id === canalId);
-  const ecos = leido.eventos.filter((e) => e.uid.endsWith('@reservas.alphateklab')).length;
-  cont.innerHTML = `<div class="mensaje-import mensaje-import--ok" role="status"><p>Se leyeron ${leido.eventos.length} ${leido.eventos.length === 1 ? 'estancia' : 'estancias'}${leido.ignorados.length ? ` y se ignoraron ${leido.ignorados.length} (${esc(leido.ignorados.map((i) => i.motivo).join(', '))})` : ''}${ecos ? `; ${ecos} salieron de aquí (eco) y no se duplican` : ''}.</p></div>
-    <ul class="eventos-leidos">${leido.eventos.map((e) => `<li>${esc(rangoTexto(e.inicio, e.fin))} · ${nochesEntre(e.inicio, e.fin).length} noches · ${esc(e.resumen || 'sin resumen')}</li>`).join('')}</ul>
-    <div class="acciones" style="margin-top:8px"><button type="button" class="boton boton--primario" data-aplicar>Aplicar a ${esc(cabanaDe(negocio, unidadId).nombre)} (${esc(canal.nombre)})</button></div>`;
+  const cabana = cabanaDe(negocio, unidadId).nombre;
+  const n = leido.eventos.length;
+  const v = previsualizarImportacion(aloj.reservas, canalId, unidadId, leido);
+  const leidas = `${n === 1 ? 'Se leyó 1 estancia' : `Se leyeron ${n} estancias`}${leido.ignorados.length ? ` y se ${leido.ignorados.length === 1 ? 'ignoró 1' : `ignoraron ${leido.ignorados.length}`} (${leido.ignorados.map((i) => i.motivo).join(', ')})` : ''}${v.ecos ? `; ${v.ecos === 1 ? '1 salió' : `${v.ecos} salieron`} de aquí (eco) y no se ${v.ecos === 1 ? 'duplica' : 'duplican'}` : ''}.`;
+  const cambios = [v.nuevas.length && plural(v.nuevas.length, 'reserva nueva', 'reservas nuevas'), v.cambiadas.length && `${plural(v.cambiadas.length, 'cambia', 'cambian')} de fecha`].filter(Boolean).join(' y ');
+  const quitar = v.quitadas.length
+    ? `<p class="mensaje-import__quitar"><strong>Se ${v.quitadas.length === 1 ? 'quitará 1 reserva' : `quitarán ${v.quitadas.length} reservas`} de ${esc(canal.nombre)} en ${esc(cabana)}</strong> porque ya no ${v.quitadas.length === 1 ? 'viene' : 'vienen'} en este calendario: ${esc(v.quitadas.map((r) => rangoTexto(r.llegada, r.salida)).join('; '))}.</p>` : '';
+  const propio = v.soloEcos || v.propio
+    ? `<p class="mensaje-import__quitar">${icono('aviso')} Este archivo parece el calendario que exporta este sistema${v.soloEcos ? ' (todas sus estancias salieron de aquí)' : ''}, no el de ${esc(canal.nombre)}. Revisa que subiste el archivo correcto.</p>` : '';
+  const peligro = v.quitadas.length > 0;
+  cont.innerHTML = `<div class="mensaje-import ${peligro || propio ? 'mensaje-import--error' : 'mensaje-import--ok'}" role="status"><p>${esc(leidas)}${cambios ? ` Al aplicarlo: ${esc(cambios)}.` : ''}</p>${quitar}${propio}</div>
+    <ul class="eventos-leidos">${leido.eventos.map((e) => `<li>${esc(rangoTexto(e.inicio, e.fin))} · ${plural(nochesEntre(e.inicio, e.fin).length, 'noche', 'noches')} · ${esc(e.resumen || 'sin resumen')}</li>`).join('')}</ul>
+    <div class="acciones" style="margin-top:8px"><button type="button" class="boton ${peligro ? 'boton--peligro' : 'boton--primario'}" data-aplicar>${peligro ? `Aplicar y quitar ${plural(v.quitadas.length, 'reserva', 'reservas')} de ${esc(cabana)}` : `Aplicar a ${esc(cabana)} (${esc(canal.nombre)})`}</button></div>`;
   cont.querySelector('[data-aplicar]').addEventListener('click', () => {
     const r = operar((a, ahora) => aplicarImportacion(a, canalId, unidadId, leido.eventos, ahora));
-    anunciar(`Calendario de ${canal.nombre} aplicado: ${r.nuevas.length} nuevas, ${r.cambiadas.length} cambiadas, ${r.quitadas.length} quitadas.`);
+    anunciar(`Calendario de ${canal.nombre} aplicado en ${cabana}: ${plural(r.nuevas.length, 'nueva', 'nuevas')}, ${plural(r.cambiadas.length, 'cambiada', 'cambiadas')} y ${plural(r.quitadas.length, 'quitada', 'quitadas')}.`);
     alAplicar && alAplicar();
   });
 }
@@ -431,8 +454,11 @@ document.addEventListener('click', async (ev) => {
   if (b('[data-cierre]')) { operar((a, ahora2) => activarCierre(a, b('[data-cierre]').dataset.cierre, ahora2)); anunciar('Cierre preventivo activado: la página del huésped ya no ofrece esas cabañas.'); return; }
   if (b('[data-reabrir]')) {
     const canalId = b('[data-reabrir]').dataset.reabrir;
-    const sigue = vigilar(datos().aloj.canales, ahora).some((v) => v.canalId === canalId && v.vencido);
-    if (sigue && !(await confirmar({ titulo: 'Reabrir la venta directa', texto: 'El canal sigue sin sincronizar: si reabres, la página puede vender noches que ya se vendieron allá.', si: 'Reabrir de todos modos', no: 'Dejar cerrada', peligro: true }))) return;
+    const { aloj } = datos();
+    const canal = aloj.canales.find((c) => c.id === canalId);
+    const cierre = (aloj.cierres || []).find((c) => c.canalId === canalId);
+    const sigue = !sincronizoDespuesDe(canal, cierre);
+    if (sigue && !(await confirmar({ titulo: 'Reabrir la venta directa', texto: `${esc(canal ? canal.nombre : 'El canal')} no ha vuelto a sincronizar desde el cierre: si reabres, la página puede vender noches que ya se vendieron allá.`, si: 'Reabrir de todos modos', no: 'Dejar cerrada', peligro: true }))) return;
     operar((a, ahora2) => reabrirVenta(a, canalId, ahora2));
     anunciar('Venta directa reabierta.');
     return;
@@ -497,6 +523,13 @@ document.addEventListener('submit', (ev) => {
   } catch (e) {
     cont.innerHTML = `<p class="mensaje-import mensaje-import--error" role="alert">${esc(e.message)}</p>`;
   }
+});
+
+// Al tabular por el calendario, la barra enfocada se muestra entera: no debajo de la columna de cabañas (que es
+// pegajosa) ni cortada en el borde. scrollIntoView respeta el scroll-padding-left del contenedor.
+document.addEventListener('focusin', (ev) => {
+  const barra = ev.target.closest?.('.ocupacion-scroll .barra-res');
+  if (barra) barra.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 });
 
 iniciarBarra({ pagina: 'alojamiento.html', tipo: 'alojamiento' });
