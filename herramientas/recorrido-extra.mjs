@@ -72,6 +72,21 @@ try {
   const citaAuto = st.citas.find((c) => c.pacienteId === pacAuto?.id);
   comprobar('autoagenda: la solicitud llega a recepción como pendiente', citaAuto?.estado === 'pendiente' && fechaISO(citaAuto.inicio) === fechaPedida, citaAuto ? `${citaAuto.estado}, ${fechaPedida}` : 'no llegó');
   comprobar('autoagenda: el consentimiento queda con canal y texto', pacAuto?.consentimiento?.canal && /Ley 81/.test(pacAuto.consentimiento.texto), pacAuto?.consentimiento?.canal);
+  // El enlace «Mira la cita en la agenda» abre el día de la cita con ella resaltada (antes abría hoy y había que
+  // buscarla en la semana siguiente).
+  const enlaceAgenda = await tel.locator('.pie-paciente a[href*="citas.html"]').getAttribute('href');
+  const agendaPedida = await ctx.newPage();
+  vigilar(agendaPedida, 'agenda desde la autoagenda');
+  await agendaPedida.goto(new URL(enlaceAgenda, BASE).href);
+  await agendaPedida.waitForSelector('.agenda');
+  const resaltada = await agendaPedida.evaluate((id) => {
+    const el = document.querySelector(`.bloque[data-cita="${id}"]`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { nueva: el.classList.contains('bloque--nueva'), visible: r.top >= 0 && r.bottom <= innerHeight };
+  }, citaAuto?.id);
+  comprobar('autoagenda: el enlace a la agenda abre su día con la cita resaltada y a la vista', resaltada?.nueva && resaltada?.visible, JSON.stringify(resaltada));
+  await agendaPedida.close();
 
   // ── 2. «Necesito cambiarla» desde el enlace → elige uno de 3 horarios → la agenda la mueve ──
   await p.goto(BASE + 'bandeja.html');

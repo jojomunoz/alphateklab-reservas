@@ -90,8 +90,9 @@ function htmlBloque(c, st, negocio, ahora, semana) {
   const otro = vista.recurso === 'profesional' ? salaDe(negocio, c.salaId).corto : profesionalDe(negocio, c.profesionalId).corto;
   const nombre = p ? (semana ? p.nombre.split(' ').slice(-1)[0] : p.nombre) : '—';
   const etiqueta = `${p ? p.nombre : 'Cita'}, ${horaTexto(c.inicio)} a ${horaTexto(c.fin)}, ${s.nombre}, ${ESTADOS[c.estado]}${c.enSala ? ', en sala' : ''}`;
-  return `<button type="button" class="bloque bloque--${c.estado}${corto ? ' bloque--corto' : ''}${c.enSala ? ' bloque--en-sala' : ''}" data-cita="${c.id}"
-      style="top:calc(var(--escala) * ${c.top});height:calc(var(--escala) * ${durMin} - 2px)" aria-label="${esc(etiqueta)}">
+  const nueva = vista.resaltar === c.id;
+  return `<button type="button" class="bloque bloque--${c.estado}${corto ? ' bloque--corto' : ''}${c.enSala ? ' bloque--en-sala' : ''}${nueva ? ' bloque--nueva' : ''}" data-cita="${c.id}"
+      style="top:calc(var(--escala) * ${c.top});height:calc(var(--escala) * ${durMin} - 2px)" aria-label="${esc(nueva ? `Nueva solicitud: ${etiqueta}` : etiqueta)}">
       <span class="bloque__linea"><span class="bloque__hora">${horaCorta(c.inicio)}</span><span class="bloque__nombre">${esc(nombre)}</span></span>
       <span class="bloque__linea">${insigniaEstado(c.estado)}<span class="bloque__meta">${esc(s.nombre)} · ${esc(otro)}</span></span>
     </button>`;
@@ -418,8 +419,19 @@ addEventListener('hashchange', () => {
 
 const estado = cargar();
 vista.fecha = fechaISO(estado.reloj.ahora);
+// Desde la página de citas: «citas.html?cita=<id>» abre el día de esa cita (vista de día) y la resalta, para que
+// quien la pidió la encuentre sin buscarla en la semana.
+const pedida = new URLSearchParams(location.search).get('cita');
+const citaPedida = pedida ? datos(ctx).st.citas.find((c) => c.id === pedida) : null;
+if (citaPedida) Object.assign(vista, { pestana: 'agenda', modo: 'dia', fecha: fechaISO(citaPedida.inicio), resaltar: citaPedida.id });
 iniciarBarra({ pagina: 'citas.html', tipo: 'citas', alCambiarPlantilla: (id) => { plantilla = id; vista.fecha = fechaISO(cargar().reloj.ahora); pintar(); } });
 pintar();
+if (citaPedida) {
+  $(`.bloque[data-cita="${citaPedida.id}"]`)?.scrollIntoView({ block: 'center' });
+  const p = pacienteDe(datos(ctx).st, citaPedida.pacienteId);
+  // cuando() termina en «a. m.»/«p. m.»: ese punto cierra la frase (nunca «m..»)
+  anunciar(`Nueva solicitud: ${p ? p.nombre : 'la cita'}, ${cuando(citaPedida.inicio)} Está resaltada en la agenda.`);
+}
 alCambiar((e, info) => {
   pintar();
   if (!info.local && info.motivo === 'reloj') anunciar('El reloj de la demo avanzó en otra pestaña.');

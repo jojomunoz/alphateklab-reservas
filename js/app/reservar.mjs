@@ -209,7 +209,7 @@ function pintarListo(cita, paciente) {
       <p>${esc(queSigue(st, cita, negocio, paciente.telefono))}</p>
       <div class="acciones"><button type="button" class="boton" data-ics>${icono('descargar')} Agregar a mi calendario (.ics)</button><a class="boton" href="reservar.html" data-otra>Pedir otra cita</a></div>
     </div>
-    <p class="pie-paciente">¿Eres de la recepción? Mira la cita en la <a href="citas.html">agenda</a>.</p>`;
+    <p class="pie-paciente">¿Eres de la recepción? Mira la cita en la <a href="citas.html?cita=${encodeURIComponent(cita.id)}">agenda</a>.</p>`;
   main.querySelector('.resultado').focus();
   main.querySelector('[data-ics]').addEventListener('click', () => {
     descargar(`cita-${fechaISO(cita.inicio)}.ics`, exportarCita({ uid: `${cita.id}@reservas.alphateklab`, inicio: cita.inicio, fin: cita.fin, dtstamp: Date.now(), resumen: `Cita en ${negocio.nombre}`, lugar: negocio.direccion, descripcion: `${negocio.nombre} (${negocio.rotulo}).` }));
