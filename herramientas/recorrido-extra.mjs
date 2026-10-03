@@ -78,7 +78,11 @@ try {
   const conEnlace = async () => {
     const x = await estadoDe(p);
     const s = x.negocios.consultorio;
-    return s.envios.filter((v) => v.estado === 'enviado' && v.citaId && v.enlace)
+    // Una cita puede tener varios envíos con enlace (recordatorio y reintentos): se toma uno por cita, para que
+    // «cambiar» y «cancelar» prueben citas distintas.
+    const porCita = new Map();
+    for (const v of s.envios.filter((v) => v.estado === 'enviado' && v.citaId && v.enlace)) porCita.set(v.citaId, v);
+    return [...porCita.values()]
       .map((v) => ({ v, c: s.citas.find((c) => c.id === v.citaId) }))
       .filter(({ c }) => c && ['pendiente', 'reprogramada'].includes(c.estado) && c.inicio > x.reloj.ahora + 26 * 3600e3);
   };

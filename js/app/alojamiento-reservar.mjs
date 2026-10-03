@@ -66,7 +66,7 @@ function htmlResultados() {
         const cot = cotizar(negocio, [c.id], busqueda.llegada, busqueda.salida);
         return `<label class="cabana-opcion"><input type="checkbox" name="cabana" value="${c.id}"${busqueda.elegidas.includes(c.id) ? ' checked' : ''}><span><strong>${esc(c.nombre)}</strong><small>Hasta ${c.capacidad} personas</small></span><span class="cabana-opcion__precio">${balboas(cot.subtotal)}<small><br>${noches} ${noches === 1 ? 'noche' : 'noches'}, sin ITBMS</small></span></label>`;
       }).join('')}</div>
-      <p class="campo__ayuda" style="margin-top:8px" aria-live="polite">Capacidad elegida: <strong>${capElegida}</strong> ${capElegida === 1 ? 'lugar' : 'lugares'} para ${busqueda.personas} ${busqueda.personas === 1 ? 'persona' : 'personas'}${capElegida < busqueda.personas ? `: faltan ${busqueda.personas - capElegida}` : ''}.</p>`;
+      <p class="campo__ayuda" style="margin-top:8px" aria-live="polite">${!capElegida ? '' : capElegida < busqueda.personas ? `Con lo elegido caben ${capElegida}; faltan lugares para ${busqueda.personas - capElegida}.` : `Hay lugar para ${busqueda.personas === 1 ? '1 persona' : `las ${busqueda.personas} personas`}.`}</p>`;
     if (v.enCierre.length) html += `<p class="nota" style="margin-top:10px">${v.enCierre.length === 1 ? 'Una cabaña no se puede' : `${v.enCierre.length} cabañas no se pueden`} reservar en línea en este momento. Para esas, escríbenos por WhatsApp.</p>`;
     if (busqueda.elegidas.length && capElegida >= busqueda.personas) html += htmlTotal();
   }
@@ -111,7 +111,7 @@ function htmlPago(huesped) {
       <p class="yappy__rotulo">Simulado: este QR y este directorio son de ejemplo y no cobran</p>
       <p>Paga por Yappy al directorio <strong>${esc(negocio.yappy)}</strong>, o escanea el código desde tu app de Yappy:</p>
       <div class="yappy__qr" role="img" aria-label="Código QR de ejemplo, no cobra" data-qr></div>
-      <p class="campo__ayuda">El depósito queda «por verificar» hasta que el alojamiento lo vea en su Yappy Comercial. Sin servidor no se puede confirmar el pago al momento: para eso hace falta el botón de pago de Yappy (pide un servidor que reciba el aviso del banco) o un enlace de pago de Tilopay con Yappy (2 %, mínimo US$0.30).</p>
+      <p class="campo__ayuda">El depósito queda «por verificar» hasta que lo veamos en nuestro Yappy. Te confirmamos por WhatsApp.</p>
       <div class="acciones"><button type="button" class="boton boton--primario boton--grande" data-pague>Ya hice el pago</button><button type="button" class="boton boton--grande" data-volver-datos>Volver</button></div>
       <div class="resumen-errores" data-errores tabindex="-1" hidden></div>
     </div>`;
@@ -160,6 +160,10 @@ main.addEventListener('submit', (ev) => {
     const e = validarBusqueda();
     if (e.length) { mostrarErrores(form, e, { titulo: e.length === 1 ? 'Revisa las fechas:' : 'Revisa esto:' }); main.querySelector('[data-resultados]').innerHTML = ''; return; }
     busqueda.buscado = true;
+    // Si una sola cabaña alcanza para todo el grupo, queda elegida; el huésped puede cambiarla.
+    const { aloj } = datos();
+    const caben = disponiblesParaVenta(negocio, aloj.reservas, cierreVigente(aloj), busqueda.llegada, busqueda.salida).disponibles.filter((c) => c.capacidad >= busqueda.personas);
+    if (caben.length === 1) busqueda.elegidas = [caben[0].id];
     mostrarErrores(form, []);
     main.querySelector('[data-resultados]').innerHTML = htmlResultados();
     main.querySelector('[data-resultados] h2').setAttribute('tabindex', '-1');
