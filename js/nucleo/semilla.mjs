@@ -248,5 +248,5 @@ export function semillaAlojamiento(ahora, negocio = NEGOCIO_ALOJAMIENTO) {
     { id: 'expedia', nombre: 'Expedia', intervaloHoras: 2, ultimaSync: ahora - 100 * MIN, maxHoras: 6, caido: false,
       urls: { espave: 'https://www.expediapartnercentral.com/ical/ejemplo-1.ics', cuipo: 'https://www.expediapartnercentral.com/ical/ejemplo-2.ics', caoba: 'https://www.expediapartnercentral.com/ical/ejemplo-3.ics' } },
   ];
-  return { negocioId: negocio.id, reservas, canales, cierre: null, bitacora: [{ t: ahora, texto: 'Datos de ejemplo cargados.', tipo: 'info' }] };
+  return { negocioId: negocio.id, reservas, canales, cierres: [], bitacora: [{ t: ahora, texto: 'Datos de ejemplo cargados.' }] };
 }

@@ -272,3 +272,155 @@ export function sincronizarCanal(reservas, canalId, unidadId, eventos, ahora, nu
 }
 
 export { fechaLarga };
+
+// ── Operaciones sobre el estado del alojamiento ────────────────────────────
+// aloj = { reservas, canales, cierres: [{ canalId, unidades, desde }], bitacora }
+
+export const nuevoIdReserva = () => `r_${Math.random().toString(36).slice(2, 10)}`;
+
+function anotarAloj(aloj, t, texto) {
+  aloj.bitacora = aloj.bitacora || [];
+  aloj.bitacora.unshift({ t, texto });
+  if (aloj.bitacora.length > 100) aloj.bitacora.length = 100;
+}
+
+/** Cierre preventivo vigente como unión de todos los cierres por canal. */
+export function cierreVigente(aloj) {
+  const cierres = aloj.cierres || [];
+  return { activo: cierres.length > 0, unidades: [...new Set(cierres.flatMap((c) => c.unidades))], cierres };
+}
+
+/**
+ * Crea una reserva (directa o bloqueo) validando contra lo último guardado.
+ * datos = { canal: 'directo'|'bloqueo', unidades, llegada, salida, personas, huesped, sena, nota, ignorarMinimo, respetarCierre }
+ */
+export function crearReserva(aloj, negocio, datos, ahora, hoy) {
+  const errores = validarReserva(negocio, aloj.reservas, datos, { hoy, ignorarMinimo: datos.ignorarMinimo || datos.canal === 'bloqueo' });
+  if (datos.respetarCierre) {
+    const cerradas = datos.unidades.filter((u) => cierreVigente(aloj).unidades.includes(u));
+    if (cerradas.length) errores.push({ codigo: 'cierre', mensaje: `${cerradas.map((u) => cabanaDe(negocio, u).nombre).join(', ')} no se puede reservar en línea en este momento. Escríbenos por WhatsApp.` });
+  }
+  if (datos.canal === 'directo') {
+    if (!datos.huesped || String(datos.huesped.nombre || '').trim().length < 3) errores.push({ campo: 'nombre', mensaje: 'Escribe el nombre de quien reserva.' });
+    if (datos.huesped && !datos.huesped.consentimiento) errores.push({ campo: 'consentimiento', mensaje: 'Falta el consentimiento para guardar los datos (Ley 81 de 2019).' });
+  }
+  if (errores.length) return { ok: false, errores };
+  const cot = cotizar(negocio, datos.unidades, datos.llegada, datos.salida);
+  const r = {
+    id: nuevoIdReserva(), canal: datos.canal, unidades: [...datos.unidades], llegada: datos.llegada, salida: datos.salida,
+    estado: 'confirmada', creada: ahora, nota: datos.nota || '',
+    huesped: datos.canal === 'directo' ? { nombre: datos.huesped.nombre.trim(), telefono: datos.huesped.telefono || '', correo: datos.huesped.correo || '', personas: datos.personas || null, consentimiento: { fecha: ahora, canal: datos.huesped.canalConsentimiento || 'en la página' } } : null,
+    sena: datos.canal === 'directo' ? { estado: datos.sena?.estado || 'por_verificar', metodo: datos.sena?.metodo || 'Yappy', monto: cot.sena } : null,
+    total: datos.canal === 'directo' ? cot.total : null,
+    origen: datos.origen || 'recepcion',
+  };
+  aloj.reservas.push(r);
+  anotarAloj(aloj, ahora, datos.canal === 'bloqueo'
+    ? `Bloqueo manual: ${r.unidades.map((u) => cabanaDe(negocio, u).nombre).join(', ')}, ${rangoTexto(r.llegada, r.salida)}.`
+    : `Reserva directa de ${r.huesped.nombre}: ${r.unidades.map((u) => cabanaDe(negocio, u).nombre).join(', ')}, ${rangoTexto(r.llegada, r.salida)}.`);
+  return { ok: true, reserva: r, cotizacion: cot };
+}
+
+export function cancelarReserva(aloj, reservaId, ahora) {
+  const r = aloj.reservas.find((x) => x.id === reservaId);
+  if (!r) return { ok: false, errores: [{ mensaje: 'Esa reserva ya no existe.' }] };
+  if (!CANALES_EXPORTABLES.has(r.canal)) return { ok: false, errores: [{ mensaje: `Esta reserva viene de ${CANALES_ALOJ[r.canal].largo}: se cancela allá y aquí desaparece en la próxima sincronización.` }] };
+  r.estado = 'cancelada';
+  r.canceladaEn = ahora;
+  anotarAloj(aloj, ahora, `Se canceló ${r.canal === 'bloqueo' ? 'un bloqueo' : `la reserva de ${r.huesped?.nombre || 'un huésped'}`} (${rangoTexto(r.llegada, r.salida)}).`);
+  return { ok: true, reserva: r };
+}
+
+export function verificarSena(aloj, reservaId, ahora) {
+  const r = aloj.reservas.find((x) => x.id === reservaId);
+  if (!r || !r.sena) return { ok: false, errores: [{ mensaje: 'Esa reserva no tiene seña.' }] };
+  r.sena.estado = 'verificada';
+  r.sena.verificadaEn = ahora;
+  anotarAloj(aloj, ahora, `Seña verificada: ${r.huesped?.nombre || 'reserva'}.`);
+  return { ok: true };
+}
+
+export function moverReserva(aloj, negocio, reservaId, deUnidad, aUnidad, ahora) {
+  const r = aloj.reservas.find((x) => x.id === reservaId);
+  if (!r) return { ok: false, errores: [{ mensaje: 'Esa reserva ya no existe.' }] };
+  const libres = proponerReubicacion(negocio, aloj.reservas, r, deUnidad).map((c) => c.id);
+  if (!libres.includes(aUnidad)) return { ok: false, errores: [{ mensaje: `${cabanaDe(negocio, aUnidad).nombre} ya no está libre esas noches o es más chica.` }] };
+  aloj.reservas = moverUnidad(aloj.reservas, reservaId, deUnidad, aUnidad);
+  anotarAloj(aloj, ahora, `Reubicada de ${cabanaDe(negocio, deUnidad).nombre} a ${cabanaDe(negocio, aUnidad).nombre} (${rangoTexto(r.llegada, r.salida)}).`);
+  return { ok: true };
+}
+
+// ── Simulador de la demo ───────────────────────────────────────────────
+
+/** El canal deja de sincronizar: su última sincronización correcta queda `horas` atrás y ya no avanza. */
+export function simularCaida(aloj, canalId, ahora, horas = 9) {
+  const c = aloj.canales.find((x) => x.id === canalId);
+  if (!c) return { ok: false };
+  c.caido = true;
+  c.ultimaSync = Math.min(c.ultimaSync, ahora - horas * HORA);
+  anotarAloj(aloj, ahora, `${c.nombre} dejó de sincronizar (simulado).`);
+  return { ok: true, canal: c };
+}
+
+export function restablecerCanal(aloj, canalId, ahora) {
+  const c = aloj.canales.find((x) => x.id === canalId);
+  if (!c) return { ok: false };
+  c.caido = false;
+  c.ultimaSync = ahora;
+  anotarAloj(aloj, ahora, `${c.nombre} volvió a sincronizar.`);
+  return { ok: true, canal: c };
+}
+
+/**
+ * La reserva directa que un canal caído «vendería otra vez»: la primera futura de una sola cabaña conectada a ese
+ * canal; si no hay, la primera futura de cualquier canal en esas cabañas.
+ */
+export function elegirObjetivoChoque(aloj, canalId, hoy) {
+  const canal = aloj.canales.find((c) => c.id === canalId);
+  const conectadas = Object.keys(canal?.urls || {});
+  const futuras = aloj.reservas
+    .filter((r) => activa(r) && r.llegada >= hoy && r.canal !== canalId && r.unidades.some((u) => conectadas.includes(u)))
+    .sort((a, b) => (a.llegada < b.llegada ? -1 : a.llegada > b.llegada ? 1 : 0));
+  return futuras.find((r) => r.canal === 'directo' && r.unidades.length === 1) || futuras.find((r) => r.canal === 'directo') || futuras[0] || null;
+}
+
+/** Entra una reserva por el canal (que no sabía de la otra): se crea encima y queda el choque. */
+export function simularReservaOta(aloj, canalId, ahora, hoy) {
+  const objetivo = elegirObjetivoChoque(aloj, canalId, hoy);
+  if (!objetivo) return { ok: false, errores: [{ mensaje: 'No hay reservas futuras en las cabañas de ese canal para chocar.' }] };
+  const canal = aloj.canales.find((c) => c.id === canalId);
+  const unidad = objetivo.unidades.find((u) => Object.keys(canal.urls).includes(u));
+  const r = {
+    id: nuevoIdReserva(), canal: canalId, unidades: [unidad], llegada: objetivo.llegada, salida: objetivo.salida, estado: 'confirmada',
+    huesped: null, uidExterno: `${Math.random().toString(16).slice(2, 12)}${Math.random().toString(16).slice(2, 12)}@${canalId}.com`,
+    resumen: canalId === 'booking' ? 'CLOSED - Not available' : 'Reserved', creada: ahora, simulada: true,
+  };
+  aloj.reservas.push(r);
+  anotarAloj(aloj, ahora, `Entró una reserva por ${canal.nombre} para ${rangoTexto(r.llegada, r.salida)} en una cabaña que ya estaba vendida (simulado).`);
+  return { ok: true, reserva: r, objetivo };
+}
+
+export function activarCierre(aloj, canalId, ahora) {
+  const c = aloj.canales.find((x) => x.id === canalId);
+  if (!c) return { ok: false };
+  aloj.cierres = (aloj.cierres || []).filter((x) => x.canalId !== canalId);
+  aloj.cierres.push({ canalId, unidades: Object.keys(c.urls || {}), desde: ahora });
+  anotarAloj(aloj, ahora, `Cierre preventivo por ${c.nombre}: la página directa deja de vender ${Object.keys(c.urls || {}).length} cabañas.`);
+  return { ok: true };
+}
+
+export function reabrirVenta(aloj, canalId, ahora) {
+  aloj.cierres = (aloj.cierres || []).filter((x) => x.canalId !== canalId);
+  anotarAloj(aloj, ahora, 'Se reabrió la venta directa.');
+  return { ok: true };
+}
+
+/** Aplica un .ics importado para un canal y una cabaña, y lo cuenta como sincronización correcta. */
+export function aplicarImportacion(aloj, canalId, unidadId, eventos, ahora) {
+  const r = sincronizarCanal(aloj.reservas, canalId, unidadId, eventos, ahora, nuevoIdReserva);
+  aloj.reservas = r.reservas;
+  const c = aloj.canales.find((x) => x.id === canalId);
+  if (c) c.ultimaSync = ahora;
+  anotarAloj(aloj, ahora, `Importado el calendario de ${c ? c.nombre : canalId}: ${r.nuevas.length} nuevas, ${r.cambiadas.length} cambiadas, ${r.quitadas.length} quitadas${r.ecos ? `, ${r.ecos} propias ignoradas (eco)` : ''}.`);
+  return { ok: true, ...r };
+}

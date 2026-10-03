@@ -13,7 +13,7 @@ import { avanzarReloj } from './operaciones.mjs';
 import { actualizarSincronizaciones } from './alojamiento.mjs';
 import { proximoEnvio } from './recordatorios.mjs';
 
-export const VERSION_ESQUEMA = 3;
+export const VERSION_ESQUEMA = 4;
 
 export function nuevaSala(rand = Math.random) {
   const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -43,7 +43,7 @@ export function crearEstadoInicial(real, { urlBase = 'confirmar.html', plantilla
 export function esEstadoValido(e) {
   return !!e && e.version === VERSION_ESQUEMA && e.reloj && Number.isFinite(e.reloj.ahora) &&
     e.negocios && Object.keys(NEGOCIOS_CITAS).every((k) => e.negocios[k] && Array.isArray(e.negocios[k].citas)) &&
-    e.alojamiento && Array.isArray(e.alojamiento.reservas) && /^[a-z0-9]{10}$/.test(e.sala || '');
+    e.alojamiento && Array.isArray(e.alojamiento.reservas) && Array.isArray(e.alojamiento.cierres) && /^[a-z0-9]{10}$/.test(e.sala || '');
 }
 
 /**

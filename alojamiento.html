@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es-PA" data-marca="cabanas" data-marca-fija>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendario de cabañas · Cabañas Quebrada Honda (ejemplo) · alphateklab Reservas</title>
+<meta name="description" content="Calendario de cabañas por canal (directo, Airbnb, Booking, Expedia), iCal sin eco, vigilante de sincronización con cierre preventivo y choques con propuesta de reubicación. Alojamiento de ejemplo.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fuentes/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fuentes/bitter-700-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/recepcion.css">
+<link rel="stylesheet" href="css/alojamiento.css">
+<script>try{var d=document.documentElement,t=localStorage.getItem('atk-reservas-pref-tema');if(t==='claro'||t==='oscuro')d.dataset.tema=t}catch(e){}</script>
+<script type="module" src="js/app/alojamiento.mjs"></script>
+</head>
+<body>
+<a class="saltar" href="#principal">Saltar al contenido</a>
+<div id="barra-demo" class="barra-demo"></div>
+<header id="marca" class="marca"></header>
+<main id="principal" class="envoltura" tabindex="-1">
+  <h1 class="sr-only">Calendario de cabañas, canales y vigilante de sincronización</h1>
+  <noscript><p>Esta demo funciona con JavaScript. Actívalo para ver el calendario.</p></noscript>
+  <div id="alertas" class="alertas" aria-live="polite"></div>
+  <section id="calendario" class="seccion" aria-labelledby="t-cal"><p class="cargando">Cargando el calendario…</p></section>
+  <section id="choques" class="seccion" aria-labelledby="t-ch"></section>
+  <section id="reservas" class="seccion" aria-labelledby="t-res"></section>
+  <section id="canales" class="seccion" aria-labelledby="t-can"></section>
+</main>
+<footer class="pie"><div class="pie__dentro"><p>Cabañas Quebrada Honda es un alojamiento de ejemplo: las cabañas, los huéspedes y las reservas son ficticios.</p><p>alphateklab hace páginas web, apps, software a medida y automatizaciones, y además lo instala en tu local.</p></div></footer>
+</body>
+</html>

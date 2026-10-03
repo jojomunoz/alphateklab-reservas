@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {
   nochesEntre, estanciasSolapan, validarReserva, cotizar, minimoNoches, detectarChoques, proponerReubicacion, moverUnidad,
   vigilar, actualizarSincronizaciones, disponiblesParaVenta, eventosParaExportar, sincronizarCanal, rangoTexto,
+  crearReserva, cancelarReserva, simularCaida, simularReservaOta, activarCierre, reabrirVenta, cierreVigente, moverReserva, aplicarImportacion,
 } from '../js/nucleo/alojamiento.mjs';
+import { semillaAlojamiento } from '../js/nucleo/semilla.mjs';
+import { msDeFecha, fechaISO } from '../js/nucleo/tiempo.mjs';
 import { exportarCalendario, importarCalendario } from '../js/nucleo/ical.mjs';
 import { NEGOCIO_ALOJAMIENTO as neg } from '../js/nucleo/negocios.mjs';
 import { HORA } from '../js/nucleo/tiempo.mjs';
@@ -157,4 +160,65 @@ test('el ciclo completo: exportar un .ics, importarlo y obtener las mismas noche
   const leidos = importarCalendario(ics).eventos;
   assert.deepEqual(leidos.map((e) => [e.inicio, e.fin]), [['2026-12-28', '2027-01-02'], ['2027-01-05', '2027-01-06']]);
   assert.equal(rangoTexto('2026-12-28', '2027-01-02'), '28 de diciembre al 2 de enero');
+});
+
+test('recorrido del vigilante: cae Booking → alerta → cierre preventivo → entra una reserva por Booking → choque con propuesta', () => {
+  const ahora = msDeFecha('2026-10-06', 10 * 60);
+  const hoy = fechaISO(ahora);
+  const aloj = semillaAlojamiento(ahora);
+  assert.equal(vigilar(aloj.canales, ahora).some((v) => v.vencido), false);
+  simularCaida(aloj, 'booking', ahora);
+  const v = vigilar(aloj.canales, ahora).find((x) => x.canalId === 'booking');
+  assert.equal(v.vencido, true);
+  assert.equal(Math.round(v.horas), 9);
+  activarCierre(aloj, 'booking', ahora);
+  const cierre = cierreVigente(aloj);
+  assert.deepEqual(cierre.unidades.sort(), ['corotu', 'cuipo', 'guayacan', 'nance']);
+  const venta = disponiblesParaVenta(neg, aloj.reservas, cierre, '2026-11-02', '2026-11-04');
+  assert.deepEqual(venta.enCierre.map((c) => c.id).sort(), ['corotu', 'cuipo', 'guayacan', 'nance']);
+  assert.ok(!venta.disponibles.some((c) => cierre.unidades.includes(c.id)), 'ninguna cabaña cerrada se ofrece');
+  const directa = crearReserva(aloj, neg, { canal: 'directo', unidades: ['corotu'], llegada: '2026-11-02', salida: '2026-11-04', personas: 2, huesped: { nombre: 'Prueba Ejemplo', consentimiento: true }, respetarCierre: true }, ahora, hoy);
+  assert.equal(directa.ok, false);
+  assert.equal(directa.errores[0].codigo, 'cierre');
+  assert.equal(detectarChoques(aloj.reservas).length, 0);
+  const s = simularReservaOta(aloj, 'booking', ahora, hoy);
+  assert.ok(s.ok);
+  const ch = detectarChoques(aloj.reservas);
+  assert.equal(ch.length, 1);
+  assert.equal(ch[0].b.id, s.reserva.id, 'la de Booking entró después');
+  assert.equal(ch[0].a.canal, 'directo');
+  const prop = proponerReubicacion(neg, aloj.reservas, ch[0].b, ch[0].unidadId);
+  assert.ok(prop.length > 0, 'hay una cabaña libre para reubicar');
+  assert.ok(moverReserva(aloj, neg, ch[0].b.id, ch[0].unidadId, prop[0].id, ahora).ok);
+  assert.equal(detectarChoques(aloj.reservas).length, 0);
+  reabrirVenta(aloj, 'booking', ahora);
+  assert.equal(cierreVigente(aloj).activo, false);
+});
+
+test('crear reservas: valida al escribir, calcula total con ITBMS y seña; un bloqueo no lleva huésped', () => {
+  const ahora = msDeFecha('2026-10-06', 10 * 60);
+  const aloj = { reservas: [], canales: [], cierres: [] };
+  const r = crearReserva(aloj, neg, { canal: 'directo', unidades: ['caoba'], llegada: '2026-10-20', salida: '2026-10-23', personas: 5, huesped: { nombre: 'Familia de ejemplo', telefono: '+50760000999', consentimiento: true } }, ahora, '2026-10-06');
+  assert.ok(r.ok);
+  assert.equal(r.reserva.total, Math.round(170 * 3 * 100 * 1.1));
+  assert.equal(r.reserva.sena.estado, 'por_verificar');
+  assert.equal(crearReserva(aloj, neg, { canal: 'directo', unidades: ['caoba'], llegada: '2026-10-22', salida: '2026-10-24', huesped: { nombre: 'Otra', consentimiento: true } }, ahora, '2026-10-06').errores[0].codigo, 'choque');
+  const b = crearReserva(aloj, neg, { canal: 'bloqueo', unidades: ['caoba'], llegada: '2026-10-23', salida: '2026-10-24' }, ahora, '2026-10-06');
+  assert.ok(b.ok, 'el bloqueo de una noche entra justo cuando sale la reserva');
+  assert.equal(b.reserva.huesped, null);
+  assert.equal(crearReserva(aloj, neg, { canal: 'directo', unidades: ['nance'], llegada: '2026-10-20', salida: '2026-10-23', huesped: { nombre: 'Sin permiso', consentimiento: false } }, ahora, '2026-10-06').errores[0].campo, 'consentimiento');
+  assert.ok(cancelarReserva(aloj, r.reserva.id, ahora).ok);
+  const ota = { id: 'x', canal: 'airbnb', unidades: ['nance'], llegada: '2026-11-01', salida: '2026-11-03', estado: 'confirmada' };
+  aloj.reservas.push(ota);
+  assert.match(cancelarReserva(aloj, 'x', ahora).errores[0].mensaje, /se cancela allá/);
+});
+
+test('importar un .ics de un canal cuenta como sincronización correcta', () => {
+  const ahora = msDeFecha('2026-10-06', 10 * 60);
+  const aloj = semillaAlojamiento(ahora);
+  simularCaida(aloj, 'airbnb', ahora);
+  const r = aplicarImportacion(aloj, 'airbnb', 'corotu', [{ uid: 'nuevo@airbnb.com', inicio: '2026-10-25', fin: '2026-10-27', resumen: 'Reserved' }], ahora + 1000);
+  assert.equal(r.nuevas.length, 1);
+  assert.equal(aloj.canales.find((c) => c.id === 'airbnb').ultimaSync, ahora + 1000);
+  assert.equal(vigilar(aloj.canales, ahora + 1000).find((x) => x.canalId === 'airbnb').vencido, false);
 });
