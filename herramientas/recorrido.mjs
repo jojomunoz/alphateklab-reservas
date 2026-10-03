@@ -18,6 +18,9 @@ const conCapturas = !args.includes('--sin-capturas');
 
 const resultados = [];
 const errores = [];
+// ntfy.sh limita las conexiones por IP (429) cuando varias pruebas abren el relevo seguido. Chrome lo anota en la
+// consola sin la URL; se cuenta aparte, como externo, solo si se vio de verdad una respuesta 429 de ntfy.sh.
+let ntfy429 = 0;
 function comprobar(nombre, ok, detalle = '') {
   resultados.push({ nombre, ok: !!ok, detalle });
   console.log(`${ok ? 'OK ' : 'FALLA'} ${nombre}${detalle ? ` · ${detalle}` : ''}`);
@@ -25,7 +28,10 @@ function comprobar(nombre, ok, detalle = '') {
 function vigilar(pagina, etiqueta) {
   pagina.on('console', (m) => { if (m.type() === 'error') errores.push(`${etiqueta}: ${m.text()}`); });
   pagina.on('pageerror', (e) => errores.push(`${etiqueta}: ${e.message}`));
-  pagina.on('response', (r) => { if (r.status() >= 400 && !r.url().includes('ntfy.sh')) errores.push(`${etiqueta}: ${r.status()} ${r.url()}`); });
+  pagina.on('response', (r) => {
+    if (r.url().includes('ntfy.sh') && r.status() === 429) ntfy429++;
+    else if (r.status() >= 400 && !r.url().includes('ntfy.sh')) errores.push(`${etiqueta}: ${r.status()} ${r.url()}`);
+  });
 }
 const estadoDe = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('atk-reservas')));
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -278,7 +284,9 @@ try {
 // El único error esperado: el intento de leer la URL de Booking, que la especificación pide hacer para mostrar que el
 // CORS lo impide. Chrome lo anota en la consola aunque la página lo capture. Se cuenta aparte.
 const esperados = errores.filter((x) => /admin\.booking\.com|blocked by CORS|net::ERR_FAILED/.test(x));
-const inesperados = errores.filter((x) => !esperados.includes(x));
+const limite = ntfy429 ? errores.filter((x) => /status of 429/.test(x)) : [];
+const inesperados = errores.filter((x) => !esperados.includes(x) && !limite.includes(x));
+if (ntfy429) console.log(`AVISO ntfy.sh respondió 429 (límite de conexiones) ${ntfy429} veces; ${limite.length} líneas de consola por eso, contadas aparte.`);
 comprobar('consola sin errores en todo el recorrido', inesperados.length === 0, `${inesperados.length} inesperados${inesperados.length ? `: ${inesperados.slice(0, 5).join(' | ')}` : ''}; ${esperados.length} esperados del intento de CORS`);
 const fallan = resultados.filter((r) => !r.ok);
 console.log(`\n${resultados.length - fallan.length} de ${resultados.length} comprobaciones pasaron.`);

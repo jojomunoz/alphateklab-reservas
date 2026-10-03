@@ -13,6 +13,9 @@ const CAP = new URL('../capturas/', import.meta.url).pathname;
 mkdirSync(CAP, { recursive: true });
 const resultados = [];
 const errores = [];
+// ntfy.sh limita las conexiones por IP (429) cuando varias pruebas abren el relevo seguido. Chrome lo anota en la
+// consola sin la URL; se cuenta aparte, como externo, solo si se vio de verdad una respuesta 429 de ntfy.sh.
+let ntfy429 = 0;
 function comprobar(nombre, ok, detalle = '') {
   resultados.push({ nombre, ok: !!ok, detalle });
   console.log(`${ok ? 'OK ' : 'FALLA'} ${nombre}${detalle ? ` · ${detalle}` : ''}`);
@@ -20,7 +23,10 @@ function comprobar(nombre, ok, detalle = '') {
 function vigilar(p, etiqueta) {
   p.on('console', (m) => { if (m.type() === 'error') errores.push(`${etiqueta}: ${m.text()}`); });
   p.on('pageerror', (e) => errores.push(`${etiqueta}: ${e.message}`));
-  p.on('response', (r) => { if (r.status() >= 400 && !r.url().includes('ntfy.sh')) errores.push(`${etiqueta}: ${r.status()} ${r.url()}`); });
+  p.on('response', (r) => {
+    if (r.url().includes('ntfy.sh') && r.status() === 429) ntfy429++;
+    else if (r.status() >= 400 && !r.url().includes('ntfy.sh')) errores.push(`${etiqueta}: ${r.status()} ${r.url()}`);
+  });
 }
 const estadoDe = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('atk-reservas')));
 async function restablecer(p, vista) {
@@ -284,7 +290,10 @@ try {
 } finally {
   await nav.close();
 }
-comprobar('consola sin errores en todo el recorrido', errores.length === 0, errores.slice(0, 4).join(' | '));
+const limite = ntfy429 ? errores.filter((x) => /status of 429/.test(x)) : [];
+const propios = errores.filter((x) => !limite.includes(x));
+if (ntfy429) console.log(`AVISO ntfy.sh respondió 429 (límite de conexiones) ${ntfy429} veces; ${limite.length} líneas de consola por eso, contadas aparte.`);
+comprobar('consola sin errores propios en todo el recorrido', propios.length === 0, propios.slice(0, 4).join(' | '));
 const fallan = resultados.filter((r) => !r.ok);
 console.log(`\n${resultados.length - fallan.length} de ${resultados.length} comprobaciones pasaron.`);
 process.exitCode = fallan.length ? 1 : 0;
