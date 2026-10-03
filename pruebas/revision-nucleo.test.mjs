@@ -463,3 +463,14 @@ test('ningún texto escribe «a. m..»: la hora ya termina en punto', () => {
   const textos = [...st.bitacora.map((b) => b.texto), ...st.tareas.map((x) => x.motivo), ...st.envios.map((e) => e.texto || '')].join('\n');
   assert.ok(!/m\.\./.test(textos), textos.split('\n').find((x) => /m\.\./.test(x)));
 });
+
+import { porProfesional } from '../js/nucleo/riesgo.mjs';
+
+test('la tasa de confirmación no cuenta los avisos de citas que nacieron confirmadas', () => {
+  const st = crearEstadoNegocio(neg);
+  const p = registrarPaciente(st, neg, { nombre: 'Ana Prueba', cedula: '8-000-2401', telefono: '6000-0241', consentimiento: true }, LUNES).paciente;
+  const { cita } = crearCita(st, neg, { pacienteId: p.id, servicioId: 'control', profesionalId: 'rios', salaId: 'c1', inicio: t('2026-10-08', '10:00'), estado: 'confirmada', regla }, LUNES);
+  avanzarReloj(st, neg, t('2026-10-07', '12:00'), OPC);
+  assert.ok(st.envios.some((e) => e.citaId === cita.id && e.clase === 'aviso' && e.estado === 'enviado'), 'le salió el aviso');
+  assert.deepEqual(porProfesional(st, neg).find((f) => f.profesional.id === 'rios').confirmacion, { n: 0, de: 0, tasa: null });
+});

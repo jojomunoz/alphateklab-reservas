@@ -38,10 +38,11 @@ export function conInasistencias(st, ahora) {
 /**
  * Por profesional:
  * - inasistencia = no asistió / (atendidas + no asistió), sobre las citas ya pasadas;
- * - confirmación = citas confirmadas / citas a las que se les mandó al menos un recordatorio.
+ * - confirmación = citas confirmadas / citas a las que se les mandó al menos un recordatorio que pide confirmar
+ *   (el aviso de una cita que ya nació confirmada no cuenta: no pregunta nada).
  */
 export function porProfesional(st, negocio) {
-  const conRecordatorio = new Set(st.envios.filter((e) => e.citaId && e.tipo === 'mensaje' && e.estado === 'enviado').map((e) => e.citaId));
+  const conRecordatorio = new Set(st.envios.filter((e) => e.citaId && e.tipo === 'mensaje' && e.estado === 'enviado' && e.clase !== 'aviso').map((e) => e.citaId));
   return negocio.profesionales.map((prof) => {
     const suyas = st.citas.filter((c) => c.profesionalId === prof.id);
     const pasadas = suyas.filter((c) => c.estado === 'atendida' || c.estado === 'no_asistio');

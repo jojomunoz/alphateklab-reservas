@@ -66,6 +66,7 @@ const MUTACIONES = [
   ['operaciones: la autoagenda acepta una cédula registrada con otro celular', 'js/nucleo/operaciones.mjs', 'if (existente && existente.telefono !== tel.e164) return', 'if (false) return'],
   ['alojamiento: el .ics exporta las reservas canceladas', 'js/nucleo/alojamiento.mjs', 'activa(r) && r.unidades.includes(unidadId) && (CANALES_EXPORTABLES', 'r.unidades.includes(unidadId) && (CANALES_EXPORTABLES'],
   ['alojamiento: importar no cancela lo que el canal ya no manda', 'js/nucleo/alojamiento.mjs', 'if (deEsteCalendario(r) && activa(r) && !ajenas.some((e) => e.uid === r.uidExterno)) {', 'if (false) {'],
+  ['riesgo: el aviso de una cita ya confirmada cuenta como «confirmó»', 'js/nucleo/riesgo.mjs', "e.estado === 'enviado' && e.clase !== 'aviso')", "e.estado === 'enviado')"],
   ['semilla: las llamadas caen con el negocio cerrado', 'js/nucleo/semilla.mjs', '{ canales: canalesDe(pac), ventana: VENTANA, siguienteAbierto });', '{ canales: canalesDe(pac), ventana: VENTANA });'],
 ];
 

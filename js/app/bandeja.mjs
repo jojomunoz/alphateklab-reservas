@@ -3,15 +3,13 @@
 // pasa en dos días.
 
 import { esc, icono, anunciar, abrirDialogo, copiar, $, reduceMovimiento, claveDeFoco, devolverFoco } from './ui.mjs';
-import { cargar, alCambiar, transaccion, adelantarReloj, opcionesEnlace } from './almacen.mjs';
+import { cargar, alCambiar, transaccion, adelantarReloj } from './almacen.mjs';
 import { iniciarBarra, pintarMarca, plantillaCitas } from './demo.mjs';
 import { escucharEnRecepcion, pintarPieRelevo, AVISO_RELEVO } from './relevo.mjs';
-import { NEGOCIOS_CITAS } from '../nucleo/negocios.mjs';
-import { fechaISO, fechaLarga, fechaCorta, horaTexto, inicioDelDia, sumarDias, msDeFecha, HORA, DIA, MIN, DIAS_CORTOS, diaSemana, leerISO } from '../nucleo/tiempo.mjs';
+import { fechaISO, fechaLarga, fechaCorta, horaTexto, inicioDelDia, sumarDias, msDeFecha, HORA, DIA, DIAS_CORTOS, diaSemana, leerISO } from '../nucleo/tiempo.mjs';
 import { proximoEnvio, CANALES, VENTANA } from '../nucleo/recordatorios.mjs';
 import { pacienteDe, citaDe } from '../nucleo/operaciones.mjs';
-import { profesionalDe } from '../nucleo/agenda.mjs';
-import { mostrarTelefono, enlaceWhatsApp } from '../nucleo/contacto.mjs';
+import { mostrarTelefono } from '../nucleo/contacto.mjs';
 import { PLANTILLAS_POR_DEFECTO, VARIABLES, revisarPlantilla, rellenar, segmentosSMS } from '../nucleo/mensajes.mjs';
 import { datos, abrirCita, previsualizarEnvio, cuando, botonAbrirEnvio } from './componentes-citas.mjs';
 

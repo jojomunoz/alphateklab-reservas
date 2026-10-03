@@ -70,6 +70,12 @@ try {
   const nav = await chromium.launch();
   navegadores.push(nav);
   const escritorio = await nav.newContext({ viewport: { width: 1280, height: 860 }, locale: 'es-PA', timezoneId: 'America/Panama' });
+  // ntfy.sh limita las conexiones por IP: cada vista de recepción abre una. Hasta la prueba del relevo (paso 6), las
+  // vistas reciben un relevo callado (sin conexión real) para no gastar el cupo antes de tiempo.
+  const callado = (ruta) => ruta.request().method() === 'POST'
+    ? ruta.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' }, body: '{}' })
+    : ruta.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/event-stream' }, body: 'retry: 600000\n\n' });
+  if (conRelevo) await escritorio.route(/https:\/\/ntfy\.sh\//, callado);
   const p = await escritorio.newPage();
   vigilar(p, 'recepción');
   await p.goto(BASE + 'citas.html');
@@ -246,6 +252,7 @@ try {
 
   // ── 6. Relevo real entre dos navegadores distintos (dos procesos de Chromium, perfiles separados) ──
   if (conRelevo) {
+    await escritorio.unroute(/https:\/\/ntfy\.sh\//, callado);
     const navW = await chromium.launch();
     navegadores.push(navW);
     await p.goto(BASE + 'bandeja.html');

@@ -5,9 +5,8 @@ import { esc, icono, anunciar, $ } from './ui.mjs';
 import { cargar, alCambiar, transaccion, preferencia } from './almacen.mjs';
 import { iniciarBarra, pintarMarca, relojChip, plantillaCitas } from './demo.mjs';
 import { escucharEnRecepcion, pintarPieRelevo } from './relevo.mjs';
-import { NEGOCIOS_CITAS } from '../nucleo/negocios.mjs';
 import {
-  fechaISO, fechaLarga, fechaCorta, horaTexto, horaCorta, horaDeMinutos, sumarDias, lunesDe, msDeFecha, minutosDelDia, diaSemana,
+  fechaISO, fechaLarga, fechaCorta, horaTexto, horaCorta, horaDeMinutos, sumarDias, lunesDe, minutosDelDia, diaSemana,
   diaRelativo, DIAS_CORTOS, MESES, leerISO, MIN,
 } from '../nucleo/tiempo.mjs';
 import { tramosDelDia, motivoCierre, libresDelRecurso, servicioDe, profesionalDe, salaDe, ESTADOS } from '../nucleo/agenda.mjs';
@@ -15,9 +14,9 @@ import { pacienteDe, resolverTarea, retirarDeEspera, citaDe, cambiarEstado, camb
 import { sinConfirmar, conInasistencias, porProfesional, costoMensajesDelMes, asistenciaDe, porcentaje, ENLACE_PRODUCCION } from '../nucleo/riesgo.mjs';
 import { CANALES } from '../nucleo/recordatorios.mjs';
 import { TARIFAS, dolares } from '../nucleo/mensajes.mjs';
-import { mostrarTelefono, buscarPersonas, enlaceWhatsApp } from '../nucleo/contacto.mjs';
+import { mostrarTelefono, buscarPersonas } from '../nucleo/contacto.mjs';
 import {
-  datos, operar, abrirNuevaCita, abrirCita, abrirPaciente, abrirRegistro, abrirAgregarEspera, insigniaEstado, textoServicio, cuando,
+  datos, operar, abrirNuevaCita, abrirCita, abrirPaciente, abrirRegistro, abrirAgregarEspera, insigniaEstado, cuando,
 } from './componentes-citas.mjs';
 
 const PESTANAS = ['agenda', 'pacientes', 'espera', 'riesgo'];
