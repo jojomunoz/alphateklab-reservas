@@ -6,7 +6,7 @@
 //   ofertas (huecos liberados ofrecidos a la lista), plantillas, regla (por defecto), ajustes, bitacora, procesados.
 
 import { MIN, fechaISO, fechaLarga, horaTexto, sumarDias } from './tiempo.mjs';
-import { validarCita, huecosDelDia, horasUnicas, servicioDe, profesionalDe, ESTADOS, salasPosibles, profesionalesPosibles } from './agenda.mjs';
+import { validarCita, huecosDelDia, horasUnicas, servicioDe, profesionalDe, ESTADOS, salasPosibles, profesionalesPosibles, siguienteMomentoAbierto } from './agenda.mjs';
 import { planificar, aplicarRespuesta, vencer, ajustarAVentana, REGLA_POR_DEFECTO, VENTANA, CANALES } from './recordatorios.mjs';
 import { normalizarTelefono, validarCedula, validarCorreo, primerNombre } from './contacto.mjs';
 import { PLANTILLAS_POR_DEFECTO, rellenar } from './mensajes.mjs';
@@ -27,6 +27,27 @@ export function crearEstadoNegocio(negocio) {
   };
 }
 
+/**
+ * Ajustes de la agenda que la recepción cambia en la demo: minutos libres entre citas (buffer) y si las citas que
+ * se piden en la página quedan confirmadas al momento.
+ */
+export function cambiarAjustes(st, cambios) {
+  const errores = [];
+  const nuevos = {};
+  if ('buffer' in cambios) {
+    const b = cambios.buffer;
+    if (Number.isInteger(b) && b >= 0 && b <= 60 && b % 5 === 0) nuevos.buffer = b;
+    else errores.push({ campo: 'buffer', mensaje: 'Los minutos entre citas van de 0 a 60, de 5 en 5.' });
+  }
+  if ('autoConfirmar' in cambios) {
+    if (typeof cambios.autoConfirmar === 'boolean') nuevos.autoConfirmar = cambios.autoConfirmar;
+    else errores.push({ campo: 'autoConfirmar', mensaje: 'Elige si se confirman solas o no.' });
+  }
+  if (errores.length) return { ok: false, errores };
+  st.ajustes = { ...(st.ajustes || {}), ...nuevos };
+  return { ok: true, ajustes: st.ajustes };
+}
+
 /** Configuración del negocio con los ajustes que la recepción cambió en la demo. */
 export function negocioEfectivo(negocio, st) {
   return { ...negocio, ajustes: { ...negocio.ajustes, ...(st.ajustes || {}) } };
@@ -44,14 +65,24 @@ export function canalesDe(paciente) {
   return c;
 }
 
-function anotar(st, t, texto, tipo = 'info') {
-  st.bitacora.unshift({ t, texto, tipo });
+/** Anota en la bitácora. `pacienteId` marca las entradas que nombran a una persona, para poder borrarla después. */
+function anotar(st, t, texto, tipo = 'info', pacienteId = null) {
+  st.bitacora.unshift({ t, texto, tipo, ...(pacienteId ? { pacienteId } : {}) });
   if (st.bitacora.length > 200) st.bitacora.length = 200;
+}
+
+/** Cierra las tareas de llamar abiertas de una cita (la persona ya respondió, la cita cambió o ya pasó). */
+function cerrarTareas(st, citaId, ahora, resultado = 'cerrada') {
+  for (const t of st.tareas) if (t.citaId === citaId && !t.hecha) t.hecha = { t: ahora, resultado };
 }
 
 // ── Pacientes ──────────────────────────────────────────────────────────────
 
-export function registrarPaciente(st, negocio, datos, ahora) {
+/**
+ * Revisa los datos de una persona sin tocar el estado y sin mirar si ya existe.
+ * @returns {{errores: Array, nombre: string, ced: object, tel: object, correo: object}}
+ */
+export function revisarDatosPersona(datos, ahora) {
   const errores = [];
   const nombre = String(datos.nombre || '').trim().replace(/\s+/g, ' ');
   if (nombre.length < 3 || !nombre.includes(' ')) errores.push({ campo: 'nombre', mensaje: 'Escribe nombre y apellido.' });
@@ -66,11 +97,21 @@ export function registrarPaciente(st, negocio, datos, ahora) {
   if (!datos.consentimiento) {
     errores.push({ campo: 'consentimiento', mensaje: 'Falta el consentimiento: sin él no se pueden guardar los datos (Ley 81 de 2019).' });
   }
+  return { errores, nombre, ced, tel, correo };
+}
+
+/** Registro en recepción: quien registra ve la lista, así que ante una cédula repetida se le dice de quién es. */
+export function registrarPaciente(st, negocio, datos, ahora) {
+  const { errores, nombre, ced, tel, correo } = revisarDatosPersona(datos, ahora);
   if (ced.ok) {
     const dup = st.pacientes.find((p) => p.cedula === ced.valor && !p.eliminado);
     if (dup) errores.push({ campo: 'cedula', mensaje: `Ya hay alguien con esa cédula: ${dup.nombre}. Búscalo en la lista.` });
   }
   if (errores.length) return { ok: false, errores };
+  return { ok: true, paciente: guardarPersona(st, negocio, datos, { nombre, ced, tel, correo }, ahora) };
+}
+
+function guardarPersona(st, negocio, datos, { nombre, ced, tel, correo }, ahora) {
   const paciente = {
     id: nuevoId('p'),
     nombre,
@@ -84,8 +125,8 @@ export function registrarPaciente(st, negocio, datos, ahora) {
     creado: ahora,
   };
   st.pacientes.push(paciente);
-  anotar(st, ahora, `Se registró a ${nombre}.`, 'paciente');
-  return { ok: true, paciente };
+  anotar(st, ahora, `Se registró a ${nombre}.`, 'paciente', paciente.id);
+  return paciente;
 }
 
 /** Retira el permiso: no se le vuelve a escribir y lo que estaba en cola se detiene. */
@@ -96,7 +137,7 @@ export function revocarConsentimiento(st, pacienteId, ahora) {
   for (const c of st.citas.filter((x) => x.pacienteId === pacienteId)) {
     st.envios = aplicarRespuesta(st.envios, c.id, 'sin_consentimiento', ahora);
   }
-  anotar(st, ahora, `${p.nombre} retiró el permiso para mensajes. No se le escribirá más.`, 'paciente');
+  anotar(st, ahora, `${p.nombre} retiró el permiso para mensajes. No se le escribirá más.`, 'paciente', p.id);
   return { ok: true };
 }
 
@@ -105,11 +146,16 @@ export function renovarConsentimiento(st, negocio, pacienteId, canal, ahora) {
   if (!p) return { ok: false, errores: [{ mensaje: 'No existe esa persona.' }] };
   p.consentimiento = { fecha: ahora, canal, texto: textoConsentimiento(negocio), version: 1 };
   p.revocado = null;
-  anotar(st, ahora, `${p.nombre} volvió a dar su permiso (${canal}).`, 'paciente');
+  anotar(st, ahora, `${p.nombre} volvió a dar su permiso (${canal}).`, 'paciente', p.id);
   return { ok: true };
 }
 
-/** Derecho de cancelación (ARCO): borra los datos personales y deja las citas pasadas como anónimas. */
+export const PERSONA_ELIMINADA = 'Persona eliminada';
+
+/**
+ * Derecho de cancelación (ARCO): borra los datos personales y deja las citas pasadas como anónimas. El nombre sale
+ * también de la bitácora y de los mensajes ya enviados (su texto y su enlace lo llevaban); queda lo que pasó.
+ */
 export function eliminarPaciente(st, pacienteId, ahora) {
   const p = pacienteDe(st, pacienteId);
   if (!p) return { ok: false, errores: [{ mensaje: 'No existe esa persona.' }] };
@@ -117,19 +163,29 @@ export function eliminarPaciente(st, pacienteId, ahora) {
   if (futuras.length) {
     return { ok: false, errores: [{ mensaje: `Tiene ${futuras.length === 1 ? 'una cita próxima' : `${futuras.length} citas próximas`}. Cancélalas antes de borrar sus datos.` }] };
   }
-  Object.assign(p, { nombre: 'Persona eliminada', cedula: '', telefono: '', correo: '', nacimiento: '', notas: '', consentimiento: null, revocado: { fecha: ahora }, eliminado: ahora });
-  st.envios = st.envios.filter((e) => e.pacienteId !== pacienteId || e.estado !== 'programado');
+  const nombre = p.nombre;
+  for (const b of st.bitacora) {
+    if (b.pacienteId === pacienteId || (nombre && b.texto.includes(nombre))) b.texto = b.texto.split(nombre).join('(persona eliminada)');
+  }
+  st.envios = st.envios
+    .filter((e) => e.pacienteId !== pacienteId || e.estado !== 'programado')
+    .map((e) => (e.pacienteId === pacienteId && (e.texto || e.enlace) ? { ...e, texto: '', enlace: '', borrado: ahora } : e));
   st.espera = st.espera.filter((e) => e.pacienteId !== pacienteId);
+  Object.assign(p, { nombre: PERSONA_ELIMINADA, cedula: '', telefono: '', correo: '', nacimiento: '', notas: '', consentimiento: null, revocado: { fecha: ahora }, eliminado: ahora });
   anotar(st, ahora, 'Se borraron los datos de una persona a pedido suyo.', 'paciente');
   return { ok: true };
 }
 
 // ── Citas ──────────────────────────────────────────────────────────────────
 
-/** Programa en la bandeja los recordatorios de una cita según su regla. */
-export function programarRecordatorios(st, cita, ahora) {
+/**
+ * Programa en la bandeja los recordatorios de una cita según su regla. La tarea de llamar cae con el negocio
+ * abierto. `previos` son los momentos de lo que ya salió (al cambiar la regla a mitad de camino).
+ */
+export function programarRecordatorios(st, cita, ahora, { negocio = null, previos = [] } = {}) {
   const paciente = pacienteDe(st, cita.pacienteId);
-  const plan = planificar(cita, cita.regla, ahora, { canales: canalesDe(paciente), ventana: VENTANA });
+  const siguienteAbierto = negocio ? (ms) => siguienteMomentoAbierto(negocio, ms) : undefined;
+  const plan = planificar(cita, cita.regla, ahora, { canales: canalesDe(paciente), ventana: VENTANA, previos, siguienteAbierto });
   for (const it of plan) {
     st.envios.push({
       id: nuevoId('e'),
@@ -156,6 +212,7 @@ function asignar(negocio, st, datos, ahora, excluirCitaId = null) {
   const huecos = huecosDelDia({
     negocio, citas: st.citas, fecha: fechaISO(datos.inicio), servicioId: datos.servicioId,
     profesionalId: datos.profesionalId || null, salaId: datos.salaId || null, ahora: datos.permitirPasado ? 0 : ahora, excluirCitaId,
+    pacienteId: datos.pacienteId || null,
   }).filter((h) => h.inicio === datos.inicio);
   if (huecos.length) return { ...datos, profesionalId: huecos[0].profesionalId, salaId: huecos[0].salaId };
   // Sin hueco a esa hora: se completa con lo habitual para que la validación diga el motivo real
@@ -194,8 +251,8 @@ export function crearCita(st, negocioBase, datos, ahora, { origen = 'recepcion',
     enSala: null,
   };
   st.citas.push(cita);
-  programarRecordatorios(st, cita, ahora);
-  anotar(st, ahora, `Cita de ${paciente.nombre}: ${fechaLarga(cita.inicio)}, ${horaTexto(cita.inicio)} con ${profesionalDe(negocio, cita.profesionalId).nombre}.`, 'cita');
+  programarRecordatorios(st, cita, ahora, { negocio });
+  anotar(st, ahora, `Cita de ${paciente.nombre}: ${fechaLarga(cita.inicio)}, ${horaTexto(cita.inicio)} con ${profesionalDe(negocio, cita.profesionalId).nombre}.`, 'cita', paciente.id);
   return { ok: true, cita };
 }
 
@@ -206,25 +263,27 @@ export function reprogramarCita(st, negocioBase, citaId, nuevo, ahora, { por = '
   if (['cancelada', 'atendida', 'no_asistio'].includes(cita.estado)) {
     return { ok: false, errores: [{ mensaje: `No se puede mover una cita ${ESTADOS[cita.estado].toLowerCase()}.` }] };
   }
-  const d = asignar(negocio, st, { servicioId: cita.servicioId, profesionalId: nuevo.profesionalId ?? cita.profesionalId, salaId: nuevo.salaId ?? null, inicio: nuevo.inicio }, ahora, citaId);
+  const d = asignar(negocio, st, { servicioId: cita.servicioId, profesionalId: nuevo.profesionalId ?? cita.profesionalId, salaId: nuevo.salaId ?? null, inicio: nuevo.inicio, pacienteId: cita.pacienteId }, ahora, citaId);
   const servicio = servicioDe(negocio, cita.servicioId);
   const errores = validarCita(negocio, st.citas, { ...d, fin: d.inicio + servicio.min * MIN }, ahora, { excluirCitaId: citaId });
   if (errores.length) return { ok: false, errores };
   const antes = cita.inicio;
   st.envios = aplicarRespuesta(st.envios, citaId, 'reprogramada', ahora);
+  cerrarTareas(st, citaId, ahora, 'reprogramada');
   Object.assign(cita, { inicio: d.inicio, fin: d.inicio + servicio.min * MIN, profesionalId: d.profesionalId, salaId: d.salaId });
-  cita.historial.push({ t: ahora, texto: `${por === 'paciente' ? 'El paciente la cambió' : 'Reprogramada'}: de ${fechaLarga(antes)} ${horaTexto(antes)} a ${fechaLarga(cita.inicio)} ${horaTexto(cita.inicio)}` });
+  cita.historial.push({ t: ahora, texto: `${por === 'paciente' ? `${negocio.vocab.Persona === 'Paciente' ? 'El paciente' : 'El cliente'} la cambió` : 'Reprogramada'}: de ${fechaLarga(antes)} ${horaTexto(antes)} a ${fechaLarga(cita.inicio)} ${horaTexto(cita.inicio)}` });
   if (por === 'paciente') {
+    // La eligió la persona: queda confirmada y se le manda solo el aviso para la hora nueva.
     cita.estado = 'confirmada';
     cita.confirmadaEn = ahora;
   } else {
     cita.estado = 'reprogramada';
     cita.confirmadaEn = null;
     cita.respuesta = null;
-    programarRecordatorios(st, cita, ahora);
   }
+  programarRecordatorios(st, cita, ahora, { negocio });
   const p = pacienteDe(st, cita.pacienteId);
-  anotar(st, ahora, `${p ? p.nombre : 'Cita'}: pasa al ${fechaLarga(cita.inicio)}, ${horaTexto(cita.inicio)}`, 'cita');
+  anotar(st, ahora, `${p ? p.nombre : 'Cita'}: pasa al ${fechaLarga(cita.inicio)}, ${horaTexto(cita.inicio)}`, 'cita', cita.pacienteId);
   return { ok: true, cita, antes };
 }
 
@@ -254,18 +313,20 @@ export function cambiarEstado(st, negocioBase, citaId, estado, ahora, { por = 'r
   cita.historial.push({ t: ahora, texto: `${ESTADOS[previo]} → ${ESTADOS[estado]} (${por})` });
   if (estado === 'confirmada') cita.confirmadaEn = ahora;
   st.envios = aplicarRespuesta(st.envios, citaId, estado === 'confirmada' ? 'confirmada' : estado === 'cancelada' ? 'cancelada' : estado, ahora);
-  if (estado === 'atendida' || estado === 'no_asistio' || estado === 'cancelada') {
-    for (const t of st.tareas) if (t.citaId === citaId && !t.hecha) t.hecha = { t: ahora, resultado: 'cerrada' };
-  }
+  // Confirmada, cancelada, atendida o no asistió: ya no hay a quién llamar para preguntar si viene.
+  cerrarTareas(st, citaId, ahora, estado);
   const p = pacienteDe(st, cita.pacienteId);
-  anotar(st, ahora, `${p ? p.nombre : 'Cita'}: ${ESTADOS[estado].toLowerCase()} (${por}).`, 'cita');
+  anotar(st, ahora, `${p ? p.nombre : 'Cita'}: ${ESTADOS[estado].toLowerCase()} (${por}).`, 'cita', cita.pacienteId);
   let oferta = null;
   if (estado === 'cancelada') oferta = ofrecerHueco(st, negocio, cita, ahora).oferta;
   return { ok: true, cita, oferta };
 }
 
-/** Cambia la regla de recordatorio de una cita: lo que faltaba se detiene y se vuelve a planificar. */
-export function cambiarRegla(st, citaId, regla, ahora) {
+/**
+ * Cambia la regla de recordatorio de una cita: lo que faltaba se detiene y se vuelve a planificar. Lo que ya salió
+ * cuenta: el máximo de mensajes no se reinicia y el siguiente respeta «cada N horas» desde el último.
+ */
+export function cambiarRegla(st, citaId, regla, ahora, negocio = null) {
   const cita = citaDe(st, citaId);
   if (!cita) return { ok: false, errores: [{ mensaje: 'Esa cita ya no existe.' }] };
   const errores = validarRegla(regla);
@@ -273,7 +334,8 @@ export function cambiarRegla(st, citaId, regla, ahora) {
   st.envios = aplicarRespuesta(st.envios, citaId, 'se cambió el recordatorio', ahora);
   cita.regla = { ...regla, dias: [...regla.dias] };
   cita.historial.push({ t: ahora, texto: 'Se cambió el recordatorio' });
-  const plan = programarRecordatorios(st, cita, ahora);
+  const previos = st.envios.filter((e) => e.citaId === citaId && e.tipo === 'mensaje' && e.estado === 'enviado').map((e) => e.salioEn ?? e.momento);
+  const plan = programarRecordatorios(st, cita, ahora, { negocio, previos });
   return { ok: true, cita, plan };
 }
 
@@ -310,9 +372,10 @@ export function responder(st, negocioBase, r, ahora) {
   const cita = citaDe(st, r.citaId);
   if (!cita) return { ok: false, resultado: 'no_existe' };
   if (r.id) { st.procesados.push(r.id); if (st.procesados.length > 500) st.procesados.shift(); }
-  if (['cancelada', 'atendida', 'no_asistio'].includes(cita.estado)) return { ok: false, resultado: 'cerrada', cita };
+  // Una cita cerrada, o que ya empezó, no se confirma ni se cambia desde el enlace.
+  if (['cancelada', 'atendida', 'no_asistio'].includes(cita.estado) || cita.inicio <= ahora) return { ok: false, resultado: 'cerrada', cita };
   const p = pacienteDe(st, cita.pacienteId);
-  const quien = p ? p.nombre : 'El paciente';
+  const quien = p ? p.nombre : (negocio.vocab.Persona || 'La persona');
   const via = r.via === 'relevo' ? 'desde otro dispositivo' : 'por el enlace';
   cita.respuesta = { t: r.t ?? ahora, tipo: r.tipo, via: r.via || 'enlace' };
 
@@ -323,15 +386,16 @@ export function responder(st, negocioBase, r, ahora) {
       cita.historial.push({ t: ahora, texto: `Confirmó ${via}` });
     }
     st.envios = aplicarRespuesta(st.envios, cita.id, 'confirmo', ahora);
-    anotar(st, ahora, `${quien} confirmó ${via}. Se detuvieron los mensajes que faltaban.`, 'respuesta');
+    cerrarTareas(st, cita.id, ahora, 'confirmo');
+    anotar(st, ahora, `${quien} confirmó ${via}. Se detuvieron los mensajes que faltaban.`, 'respuesta', cita.pacienteId);
     return { ok: true, resultado: 'confirmada', cita };
   }
   if (r.tipo === 'cancelo') {
     cita.estado = 'cancelada';
     cita.historial.push({ t: ahora, texto: `Canceló ${via}` });
     st.envios = aplicarRespuesta(st.envios, cita.id, 'cancelo', ahora);
-    for (const t of st.tareas) if (t.citaId === cita.id && !t.hecha) t.hecha = { t: ahora, resultado: 'cerrada' };
-    anotar(st, ahora, `${quien} avisó que no podrá ir ${via}. El horario quedó libre.`, 'respuesta');
+    cerrarTareas(st, cita.id, ahora, 'cancelo');
+    anotar(st, ahora, `${quien} avisó que no podrá ir ${via}. El horario quedó libre.`, 'respuesta', cita.pacienteId);
     const { oferta } = ofrecerHueco(st, negocio, cita, ahora);
     return { ok: true, resultado: 'cancelada', cita, oferta };
   }
@@ -339,17 +403,21 @@ export function responder(st, negocioBase, r, ahora) {
     st.envios = aplicarRespuesta(st.envios, cita.id, 'cambio', ahora);
     const res = reprogramarCita(st, negocio, cita.id, { inicio: r.hueco, profesionalId: cita.profesionalId }, ahora, { por: 'paciente' });
     if (res.ok) {
-      anotar(st, ahora, `${quien} cambió su cita ${via} al ${fechaLarga(r.hueco)}, ${horaTexto(r.hueco)}`, 'respuesta');
+      anotar(st, ahora, `${quien} cambió su cita ${via} al ${fechaLarga(r.hueco)}, ${horaTexto(r.hueco)}`, 'respuesta', cita.pacienteId);
       return { ok: true, resultado: 'reprogramada', cita };
     }
-    crearTarea(st, cita, `Eligió el ${fechaLarga(r.hueco)} a las ${horaTexto(r.hueco)}, pero ese horario ya no está libre`, ahora);
-    anotar(st, ahora, `${quien} pidió otro horario que ya no estaba libre: queda para llamar.`, 'respuesta');
-    return { ok: false, resultado: 'hueco_ocupado', cita };
+    // Ya pasó o se ocupó: la cita sigue como estaba y la recepción llama.
+    const pasado = r.hueco < ahora || res.errores.some((e) => e.codigo === 'pasado');
+    cerrarTareas(st, cita.id, ahora, 'reemplazada');
+    crearTarea(st, cita, `Eligió el ${fechaLarga(r.hueco)} a las ${horaTexto(r.hueco)}, pero ese horario ${pasado ? 'ya pasó' : 'ya no está libre'}`, ahora);
+    anotar(st, ahora, `${quien} pidió otro horario que ${pasado ? 'ya había pasado' : 'ya no estaba libre'}: queda para llamar.`, 'respuesta', cita.pacienteId);
+    return { ok: false, resultado: pasado ? 'hueco_pasado' : 'hueco_ocupado', cita };
   }
   if (r.tipo === 'llamenme' || r.tipo === 'cambio') {
     st.envios = aplicarRespuesta(st.envios, cita.id, 'llamenme', ahora);
+    cerrarTareas(st, cita.id, ahora, 'reemplazada');
     crearTarea(st, cita, 'Pidió que lo llamen para cambiar la cita', ahora);
-    anotar(st, ahora, `${quien} pidió que lo llamen para cambiar la cita.`, 'respuesta');
+    anotar(st, ahora, `${quien} pidió que lo llamen para cambiar la cita.`, 'respuesta', cita.pacienteId);
     return { ok: true, resultado: 'llamar', cita };
   }
   return { ok: false, resultado: 'desconocida' };
@@ -357,42 +425,53 @@ export function responder(st, negocioBase, r, ahora) {
 
 // ── Autoagendamiento (la persona pide la cita desde la página) ─────────────
 
+const NO_VERIFICADA = (negocio) => `No pudimos agendarla en línea con estos datos. Llama ${negocio.vocab.alNegocio} al ${negocio.telefono ? negocio.telefono.replace(/^\+507(\d{4})(\d{4})$/, '+507 $1-$2') : 'teléfono del negocio'} y te la agendamos.`;
+
 /**
- * Busca a la persona por cédula y celular (o la registra) y crea la cita. Si la cédula ya existe con otro celular,
- * no se revela de quién es: se pide llamar. Si la hora ya no está libre, no se guarda nada.
+ * Busca a la persona por cédula y celular (o la registra) y crea la cita.
+ * - La página es pública: nunca dice de quién es una cédula ni si ya está registrada. Si la cédula existe con otro
+ *   celular, se pide llamar con un mensaje que no confirma nada.
+ * - Primero se valida todo (datos y hora) y después se escribe: si la hora ya no sirve, no queda nadie registrado
+ *   ni una línea en la bitácora.
  * datos = { persona: {nombre, cedula, telefono, correo, consentimiento}, servicioId, profesionalId, inicio }
  */
 export function solicitarCita(st, negocioBase, datos, ahora) {
   const negocio = negocioEfectivo(negocioBase, st);
-  const ced = validarCedula(datos.persona.cedula), tel = normalizarTelefono(datos.persona.telefono);
-  let paciente = null;
-  if (ced.ok && tel.ok) {
-    const mismo = st.pacientes.find((p) => !p.eliminado && p.cedula === ced.valor);
-    if (mismo && mismo.telefono !== tel.e164) {
-      return { ok: false, errores: [{ campo: 'cedula', mensaje: `Esa cédula ya está registrada con otro celular. Llama ${negocio.vocab.alNegocio} para pedir la cita.` }] };
-    }
-    if (mismo) {
-      if (!datos.persona.consentimiento) return { ok: false, errores: [{ campo: 'consentimiento', mensaje: 'Marca la casilla del consentimiento para pedir la cita.' }] };
-      paciente = mismo;
-      if (!mismo.consentimiento || mismo.revocado) renovarConsentimiento(st, negocio, mismo.id, 'en la página de citas', ahora);
-    }
+  const persona = datos.persona || {};
+  const revision = revisarDatosPersona(persona, ahora);
+  const { ced, tel } = revision;
+  const existente = ced.ok ? st.pacientes.find((p) => !p.eliminado && p.cedula === ced.valor) : null;
+  if (revision.errores.length) {
+    // Un error de formato se puede decir; que la cédula exista, no.
+    return { ok: false, errores: revision.errores };
   }
-  let creado = false;
-  if (!paciente) {
-    const rp = registrarPaciente(st, negocio, { ...datos.persona, canalConsentimiento: 'en la página de citas' }, ahora);
-    if (!rp.ok) return rp;
-    paciente = rp.paciente;
-    creado = true;
+  if (existente && existente.telefono !== tel.e164) return { ok: false, errores: [{ codigo: 'no_verificada', mensaje: NO_VERIFICADA(negocio) }] };
+
+  const pacienteId = existente ? existente.id : null;
+  const d = asignar(negocio, st, { servicioId: datos.servicioId, profesionalId: datos.profesionalId || null, salaId: null, inicio: datos.inicio, pacienteId }, ahora);
+  const servicio = servicioDe(negocio, d.servicioId);
+  const errCita = validarCita(negocio, st.citas, { ...d, fin: servicio ? d.inicio + servicio.min * MIN : undefined }, ahora);
+  if (errCita.length) {
+    return {
+      ok: false,
+      errores: errCita.map((e) => (e.codigo === 'pasado'
+        ? { ...e, mensaje: 'Esa hora ya pasó. Elige otra.' }
+        : ['solape_profesional', 'solape_sala'].includes(e.codigo) ? { ...e, mensaje: 'Esa hora se acaba de ocupar. Elige otra.' }
+          : e.codigo === 'solape_paciente' ? { ...e, mensaje: `Ya tienes una cita a esa hora. Elige otra o llama ${negocio.vocab.alNegocio}.` } : e)),
+    };
+  }
+
+  let paciente = existente;
+  if (paciente) {
+    if (!paciente.consentimiento || paciente.revocado) renovarConsentimiento(st, negocio, paciente.id, 'en la página de citas', ahora);
+  } else {
+    paciente = guardarPersona(st, negocio, { ...persona, canalConsentimiento: 'en la página de citas' }, revision, ahora);
   }
   const r = crearCita(st, negocio, {
-    pacienteId: paciente.id, servicioId: datos.servicioId, profesionalId: datos.profesionalId || null, salaId: null,
-    inicio: datos.inicio, estado: negocio.ajustes.autoConfirmar ? 'confirmada' : 'pendiente',
+    pacienteId: paciente.id, servicioId: d.servicioId, profesionalId: d.profesionalId, salaId: d.salaId,
+    inicio: d.inicio, estado: negocio.ajustes.autoConfirmar ? 'confirmada' : 'pendiente',
   }, ahora, { origen: 'autoagenda' });
-  if (!r.ok) {
-    if (creado) st.pacientes = st.pacientes.filter((p) => p.id !== paciente.id);
-    return { ok: false, errores: r.errores.map((e) => (['solape_profesional', 'solape_sala', 'pasado'].includes(e.codigo) ? { ...e, mensaje: 'Esa hora se acaba de ocupar. Elige otra.' } : e)) };
-  }
-  return { ok: true, cita: r.cita, paciente };
+  return r.ok ? { ok: true, cita: r.cita, paciente } : r;
 }
 
 // ── Tareas de recepción ───────────────────────────────────────────────────
@@ -434,7 +513,7 @@ export function agregarAEspera(st, negocio, { pacienteId, servicioId, profesiona
   }
   const e = { id: nuevoId('w'), pacienteId, servicioId, profesionalId: profesionalId || null, nota: String(nota).slice(0, 200), desde: ahora, estado: 'esperando' };
   st.espera.push(e);
-  anotar(st, ahora, `${p.nombre} entró a la lista de espera.`, 'espera');
+  anotar(st, ahora, `${p.nombre} entró a la lista de espera.`, 'espera', p.id);
   return { ok: true, entrada: e };
 }
 
@@ -462,7 +541,7 @@ export function ofrecerHueco(st, negocio, citaLiberada, ahora) {
     if (s.salas && !s.salas.includes(hueco.salaId)) continue;
     const pac = pacienteDe(st, e.pacienteId);
     if (!canalesDe(pac).includes('whatsapp')) continue;
-    const errores = validarCita(negocio, st.citas, { inicio: hueco.inicio, servicioId: s.id, profesionalId: hueco.profesionalId, salaId: hueco.salaId }, ahora);
+    const errores = validarCita(negocio, st.citas, { inicio: hueco.inicio, servicioId: s.id, profesionalId: hueco.profesionalId, salaId: hueco.salaId, pacienteId: e.pacienteId }, ahora);
     if (errores.length) continue;
     candidatos.push(e);
   }
@@ -510,7 +589,7 @@ export function aceptarOferta(st, negocioBase, r, ahora) {
   st.envios = st.envios.map((x) => (x.ofertaId === oferta.id && x.estado === 'programado'
     ? { ...x, estado: 'cancelado', canceladoEn: ahora, motivoCancelacion: 'otra persona tomó el espacio' } : x));
   const p = pacienteDe(st, e.pacienteId);
-  anotar(st, ahora, `${p ? p.nombre : 'Alguien'} tomó el espacio del ${fechaLarga(oferta.hueco.inicio)}, ${horaTexto(oferta.hueco.inicio)} desde la lista de espera.`, 'espera');
+  anotar(st, ahora, `${p ? p.nombre : 'Alguien'} tomó el espacio del ${fechaLarga(oferta.hueco.inicio)}, ${horaTexto(oferta.hueco.inicio)} desde la lista de espera.`, 'espera', e.pacienteId);
   return { ok: true, resultado: 'tomada', cita: res.cita };
 }
 
@@ -522,7 +601,7 @@ export function huecosAlternativos(st, negocio, cita, ahora, cuantos = 3) {
   const desde = fechaISO(Math.max(ahora, cita.inicio - 3 * 24 * 60 * MIN));
   for (let i = 0; i < 21 && salida.length < cuantos; i++) {
     const fecha = sumarDias(desde, i);
-    const h = horasUnicas(huecosDelDia({ negocio, citas: st.citas, fecha, servicioId: cita.servicioId, profesionalId: cita.profesionalId, ahora: ahora + 2 * 60 * MIN, excluirCitaId: cita.id }))
+    const h = horasUnicas(huecosDelDia({ negocio, citas: st.citas, fecha, servicioId: cita.servicioId, profesionalId: cita.profesionalId, ahora: ahora + 2 * 60 * MIN, excluirCitaId: cita.id, pacienteId: cita.pacienteId }))
       .filter((x) => x.inicio !== cita.inicio);
     if (h.length) salida.push(h[Math.min(h.length - 1, Math.floor(h.length / 3))].inicio);
   }
@@ -566,7 +645,8 @@ export function componerEnvio(st, negocioBase, envio, ahora, opciones) {
   }
   const cita = citaDe(st, envio.citaId);
   const enlace = enlaceDeCita(st, negocio, cita, ahora, opciones);
-  const plantilla = envio.clase === 'reintento' ? st.plantillas.reintento : st.plantillas.recordatorio;
+  const plantilla = envio.clase === 'reintento' ? st.plantillas.reintento
+    : envio.clase === 'aviso' ? (st.plantillas.aviso || PLANTILLAS_POR_DEFECTO.aviso) : st.plantillas.recordatorio;
   const texto = rellenar(plantilla, {
     nombre: primerNombre(p?.nombre), fecha: fechaLarga(cita.inicio), hora: horaTexto(cita.inicio),
     profesional: profesionalDe(negocio, cita.profesionalId).nombre, negocio: negocio.nombre, enlace,
@@ -589,14 +669,21 @@ export function avanzarReloj(st, negocioBase, ahora, opciones = {}) {
       const cita = citaDe(st, e.citaId);
       const n = st.envios.filter((x) => x.citaId === e.citaId && x.tipo === 'mensaje' && x.estado === 'enviado').length;
       if (cita) crearTarea(st, cita, `No respondió a ${n} ${n === 1 ? 'mensaje' : 'mensajes'}`, e.momento);
-      anotar(st, e.momento, `Sin respuesta de ${quien}: queda «${negocio.vocab.llamar}» en recepción.`, 'tarea');
+      anotar(st, e.momento, `Sin respuesta de ${quien}: queda «${negocio.vocab.llamar}» en recepción.`, 'tarea', e.pacienteId);
       continue;
     }
     const { texto, enlace } = componerEnvio(st, negocio, e, e.momento, opciones);
     e.texto = texto;
     e.enlace = enlace;
-    const que = e.clase === 'oferta' ? 'el aviso de la lista de espera' : e.clase === 'reintento' ? 'el reintento' : `el recordatorio (${e.etiqueta})`;
-    anotar(st, e.momento, `Salió ${que} a ${quien} por ${CANALES[e.canal]}${e.de > 1 ? `, intento ${e.intento} de ${e.de}` : ''}.`, 'envio');
+    const que = e.clase === 'oferta' ? 'el aviso de la lista de espera' : e.clase === 'reintento' ? 'el reintento'
+      : e.clase === 'aviso' ? `el aviso de la cita confirmada (${e.etiqueta})` : `el recordatorio (${e.etiqueta})`;
+    anotar(st, e.momento, `Salió ${que} a ${quien} por ${CANALES[e.canal]}${e.de > 1 ? `, intento ${e.intento} de ${e.de}` : ''}.`, 'envio', e.pacienteId);
+  }
+  // Una cita que ya empezó no se confirma por teléfono: sus tareas de llamar se cierran solas.
+  for (const t of st.tareas) {
+    if (t.hecha) continue;
+    const cita = citaDe(st, t.citaId);
+    if (cita && cita.inicio <= ahora) t.hecha = { t: cita.inicio, resultado: 'vencida' };
   }
   return salieron;
 }

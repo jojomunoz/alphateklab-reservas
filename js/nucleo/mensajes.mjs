@@ -7,6 +7,8 @@ export const VARIABLES = ['nombre', 'fecha', 'hora', 'profesional', 'negocio', '
 export const PLANTILLAS_POR_DEFECTO = Object.freeze({
   recordatorio: 'Hola, {nombre}. Te recordamos tu cita en {negocio} el {fecha} a las {hora} con {profesional}. Confirma, cámbiala o avísanos si no podrás ir: {enlace}',
   reintento: 'Hola, {nombre}. Seguimos sin saber si vendrás a tu cita del {fecha} a las {hora} en {negocio}. Respóndenos con un toque: {enlace}',
+  // Para la cita que ya está confirmada (la persona la pidió y se confirmó sola, la tomó de la lista de espera o la cambió).
+  aviso: 'Hola, {nombre}. Te esperamos en {negocio} el {fecha} a las {hora} con {profesional}. Si necesitas cambiarla o no podrás ir, avísanos aquí: {enlace}',
   oferta: 'Hola, {nombre}. Se liberó un espacio en {negocio} el {fecha} a las {hora} con {profesional}. Si lo quieres, tómalo aquí; es del primero que lo acepte: {enlace}',
 });
 
@@ -27,7 +29,8 @@ export function revisarPlantilla(texto, tipo = 'recordatorio') {
   if (!variablesDe(t).includes('enlace')) {
     errores.push(tipo === 'oferta'
       ? 'Falta {enlace}: sin él no hay cómo aceptar el espacio.'
-      : 'Falta {enlace}: sin él el paciente no puede confirmar con un toque.');
+      : tipo === 'aviso' ? 'Falta {enlace}: sin él no hay cómo avisar un cambio con un toque.'
+        : 'Falta {enlace}: sin él no hay cómo confirmar con un toque.');
   }
   if (t.length > 700) errores.push(`El mensaje tiene ${t.length} caracteres; déjalo en 700 o menos.`);
   return errores;

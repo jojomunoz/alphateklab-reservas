@@ -32,33 +32,39 @@ export function codificar(datos) {
   return aBase64url(JSON.stringify({ v: VERSION_ENLACE, ...datos }));
 }
 
-export const ERROR_ENLACE = 'Este enlace está incompleto o dañado. Pide un enlace nuevo al consultorio.';
+/**
+ * Textos de error del enlace. Dicen qué hacer: pedir uno nuevo. `alNegocio` es el vocabulario del negocio
+ * («al consultorio», «a la barbería»); si no se sabe de qué negocio es el enlace, «a quien te lo mandó».
+ */
+export const errorEnlace = (alNegocio = 'a quien te lo mandó') => `Este enlace está incompleto o dañado. Pide un enlace nuevo ${alNegocio}.`;
+export const ERROR_ENLACE = errorEnlace();
 
-export function decodificar(fragmento) {
+export function decodificar(fragmento, alNegocio = 'a quien te lo mandó') {
+  const dañado = { ok: false, error: errorEnlace(alNegocio) };
   const limpio = String(fragmento || '').replace(/^#/, '').trim();
-  if (!limpio) return { ok: false, error: 'Este enlace no trae los datos de la cita. Ábrelo desde el mensaje que te llegó o pide uno nuevo al consultorio.' };
+  if (!limpio) return { ok: false, error: `Este enlace no trae los datos de la cita. Ábrelo desde el mensaje que te llegó o pide uno nuevo ${alNegocio}.` };
   let datos;
   try {
     datos = JSON.parse(deBase64url(limpio));
   } catch {
-    return { ok: false, error: ERROR_ENLACE };
+    return dañado;
   }
-  if (!datos || typeof datos !== 'object' || Array.isArray(datos)) return { ok: false, error: ERROR_ENLACE };
+  if (!datos || typeof datos !== 'object' || Array.isArray(datos)) return dañado;
   if (datos.v !== VERSION_ENLACE) {
-    return { ok: false, error: 'Este enlace es de una versión anterior. Pide un enlace nuevo al consultorio.' };
+    return { ok: false, error: `Este enlace es de una versión anterior. Pide un enlace nuevo ${alNegocio}.` };
   }
   const comunes = esTexto(datos.pl, 20) && esTexto(datos.n, 60) && esMinuto(datos.i) &&
     esTexto(datos.pr, 20) && esTexto(datos.sv, 20) && esTexto(datos.sl, 20) &&
     (datos.s === undefined || /^[a-z0-9]{10}$/.test(datos.s));
   if (datos.k === 'c') {
     const ok = comunes && esTexto(datos.c, 40) && Array.isArray(datos.hs) && datos.hs.length <= 3 && datos.hs.every(esMinuto);
-    return ok ? { ok: true, datos } : { ok: false, error: ERROR_ENLACE };
+    return ok ? { ok: true, datos } : dañado;
   }
   if (datos.k === 'o') {
     const ok = comunes && esTexto(datos.o, 40) && esTexto(datos.e, 40);
-    return ok ? { ok: true, datos } : { ok: false, error: ERROR_ENLACE };
+    return ok ? { ok: true, datos } : dañado;
   }
-  return { ok: false, error: ERROR_ENLACE };
+  return dañado;
 }
 
 export const aMinutos = (ms) => Math.round(ms / 60000);

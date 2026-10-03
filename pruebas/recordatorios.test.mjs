@@ -82,10 +82,11 @@ test('escalera de canal: WhatsApp y luego SMS o correo, según lo que tenga el p
   assert.equal(canalDelIntento({ canal: 'correo' }, 1, ['whatsapp']), 'whatsapp');
 });
 
-test('sin consentimiento (sin canales) o cita ya confirmada: nada que enviar', () => {
+test('sin consentimiento (sin canales) o cita cerrada: nada que enviar; confirmada: solo el aviso', () => {
   assert.deepEqual(planificar(cita(JUEVES_10), REGLA_POR_DEFECTO, LUNES_8, { canales: [] }), []);
-  assert.deepEqual(planificar(cita(JUEVES_10, 'confirmada'), REGLA_POR_DEFECTO, LUNES_8), []);
+  assert.deepEqual(planificar(cita(JUEVES_10, 'confirmada'), REGLA_POR_DEFECTO, LUNES_8).map((p) => p.motivo), ['aviso']);
   assert.deepEqual(planificar(cita(JUEVES_10, 'cancelada'), REGLA_POR_DEFECTO, LUNES_8), []);
+  assert.deepEqual(planificar(cita(JUEVES_10, 'atendida'), REGLA_POR_DEFECTO, LUNES_8), []);
   assert.ok(planificar(cita(JUEVES_10, 'reprogramada'), REGLA_POR_DEFECTO, LUNES_8).length > 0);
 });
 

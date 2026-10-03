@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { semillaCitas, semillaAlojamiento, horaInicialDemo, azar } from '../js/nucleo/semilla.mjs';
 import { sinConfirmar, conInasistencias, porProfesional, costoMensajesDelMes, asistenciaDe, porcentaje } from '../js/nucleo/riesgo.mjs';
 import { NEGOCIOS_CITAS, NEGOCIO_ALOJAMIENTO } from '../js/nucleo/negocios.mjs';
-import { validarCita } from '../js/nucleo/agenda.mjs';
+import { validarCita, siguienteMomentoAbierto } from '../js/nucleo/agenda.mjs';
 import { detectarChoques } from '../js/nucleo/alojamiento.mjs';
 import { msDeFecha, fechaISO, lunesDe, sumarDias, horaTexto, HORA } from '../js/nucleo/tiempo.mjs';
 import { normalizarTelefono } from '../js/nucleo/contacto.mjs';
@@ -46,6 +46,15 @@ for (const [id, negocio] of Object.entries(NEGOCIOS_CITAS)) {
     assert.ok(st.citas.filter((c) => c.inicio > AHORA).every((c) => !['atendida', 'no_asistio'].includes(c.estado)), 'nada futuro está atendido');
     assert.ok(st.envios.filter((e) => e.estado === 'enviado').every((e) => e.momento <= AHORA && e.texto && e.enlace));
     assert.ok(st.envios.filter((e) => e.estado === 'programado').every((e) => e.momento > AHORA));
+    // Las tareas de llamar caen con el negocio abierto (salvo que no abra antes de la cita).
+    for (const e of st.envios.filter((x) => x.tipo === 'llamar')) {
+      const c = st.citas.find((x) => x.id === e.citaId);
+      const abierto = siguienteMomentoAbierto(negocio, e.momento);
+      assert.ok(abierto === e.momento || abierto >= c.inicio, `llamar el ${fechaISO(e.momento)} a las ${horaTexto(e.momento)}, con ${negocio.nombre} cerrado`);
+    }
+    // Ninguna tarea abierta es de una cita que ya empezó, y las citas que nacieron confirmadas tienen su aviso.
+    assert.ok(st.tareas.filter((x) => !x.hecha).every((x) => st.citas.find((c) => c.id === x.citaId).inicio > AHORA));
+    assert.ok(st.envios.some((e) => e.clase === 'aviso'), 'hay avisos de citas confirmadas');
   });
 }
 

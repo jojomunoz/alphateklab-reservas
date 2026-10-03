@@ -18,6 +18,12 @@ export const CANALES_EXPORTABLES = new Set(['directo', 'bloqueo']);
 
 export const activa = (r) => r.estado !== 'cancelada';
 
+/**
+ * La cabaña en la que el canal tiene la reserva (la del calendario de donde vino). Si se reubica aquí, el canal no
+ * se entera: sigue mandándola en el calendario de esa cabaña, que es contra el que se sincroniza.
+ */
+export const unidadDeCanal = (r) => r.unidadCanal || r.unidades[0];
+
 export function nochesEntre(llegada, salida) {
   const n = diferenciaDias(llegada, salida);
   return Array.from({ length: Math.max(0, n) }, (_, i) => sumarDias(llegada, i));
@@ -157,14 +163,17 @@ export function detectarChoques(reservas) {
 
 /**
  * Cabañas libres para TODA la estancia de una reserva, de igual o mayor capacidad que la que ocupa.
- * Ordenadas de menor a mayor capacidad (la más justa primero). Vacía = «sin cabaña libre: contactar al huésped».
+ * Primero las que no están en riesgo (en cierre preventivo o conectadas a un canal que no sincroniza: allá podrían
+ * venderlas otra vez), y dentro de cada grupo de menor a mayor capacidad (la más justa primero). Cada una lleva
+ * `riesgo`. Vacía = «sin cabaña libre: contactar al huésped».
  */
-export function proponerReubicacion(negocio, reservas, reserva, unidadId) {
+export function proponerReubicacion(negocio, reservas, reserva, unidadId, { riesgo = new Set() } = {}) {
   const origen = cabanaDe(negocio, unidadId);
   return negocio.cabanas
     .filter((c) => c.id !== unidadId && !reserva.unidades.includes(c.id) && c.capacidad >= origen.capacidad)
     .filter((c) => choquesDeUnidad(reservas, c.id, reserva.llegada, reserva.salida, reserva.id).length === 0)
-    .sort((a, b) => a.capacidad - b.capacidad || a.nombre.localeCompare(b.nombre, 'es'));
+    .map((c) => ({ ...c, riesgo: riesgo.has(c.id) }))
+    .sort((a, b) => a.riesgo - b.riesgo || a.capacidad - b.capacidad || a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 /** Cambia una cabaña de una reserva por otra. Devuelve la lista nueva. */
@@ -180,13 +189,31 @@ export function moverUnidad(reservas, reservaId, deUnidad, aUnidad) {
 
 export const MAX_HORAS_POR_DEFECTO = 6; // el doble del intervalo de Airbnb (~3 h)
 
-/** Estado de cada canal: horas sin sincronizar y si pasó del máximo permitido. */
+/**
+ * Estado de cada canal: horas sin sincronizar, si pasó del máximo permitido y cómo está:
+ * 'vencido' (pasó del máximo: alerta roja), 'retrasado' (ya debía haber releído y no lo hizo, aunque siga dentro del
+ * máximo) o 'al_dia'. Subir el máximo apaga la alerta, pero no hace que el canal esté al día.
+ */
 export function vigilar(canales, ahora) {
   return canales.map((c) => {
     const max = c.maxHoras || MAX_HORAS_POR_DEFECTO;
     const horas = (ahora - c.ultimaSync) / HORA;
-    return { canalId: c.id, nombre: c.nombre, horas, max, vencido: horas > max, unidades: Object.keys(c.urls || {}) };
+    const vencido = horas > max;
+    const estado = vencido ? 'vencido' : horas >= (c.intervaloHoras || 2) ? 'retrasado' : 'al_dia';
+    return { canalId: c.id, nombre: c.nombre, horas, max, vencido, estado, unidades: Object.keys(c.urls || {}) };
   });
+}
+
+/** ¿El canal sincronizó después de que se cerró la venta por él? (Es lo único que permite decir «ya sincroniza».) */
+export function sincronizoDespuesDe(canal, cierre) {
+  return !!canal && !!cierre && canal.ultimaSync > cierre.desde;
+}
+
+/** Cabañas en riesgo de venderse dos veces: en cierre preventivo o conectadas a un canal que no está al día. */
+export function unidadesEnRiesgo(aloj, ahora) {
+  const riesgo = new Set(cierreVigente(aloj).unidades);
+  for (const v of vigilar(aloj.canales || [], ahora)) if (v.estado !== 'al_dia') for (const u of v.unidades) riesgo.add(u);
+  return riesgo;
 }
 
 /**
@@ -217,10 +244,14 @@ export function disponiblesParaVenta(negocio, reservas, cierre, llegada, salida)
 
 // ── iCal por cabaña ────────────────────────────────────────────────────────
 
-/** Eventos del .ics de una cabaña: SOLO reservas directas y bloqueos manuales, sin datos del huésped. */
+/**
+ * Eventos del .ics de una cabaña, sin datos del huésped: las reservas directas, los bloqueos manuales y las de otro
+ * canal que se reubicaron AQUÍ (el canal las tiene en otra cabaña; esta queda ocupada y los demás tienen que saberlo).
+ * Nunca la reserva que un canal mandó en el calendario de esta misma cabaña: sería el «eco».
+ */
 export function eventosParaExportar(reservas, unidadId) {
   return reservas
-    .filter((r) => activa(r) && CANALES_EXPORTABLES.has(r.canal) && r.unidades.includes(unidadId))
+    .filter((r) => activa(r) && r.unidades.includes(unidadId) && (CANALES_EXPORTABLES.has(r.canal) || unidadDeCanal(r) !== unidadId))
     .sort((a, b) => (a.llegada < b.llegada ? -1 : 1))
     .map((r) => ({
       uid: `${r.id}-${unidadId}@${DOMINIO_UID}`,
@@ -237,12 +268,14 @@ export function eventosParaExportar(reservas, unidadId) {
 export function sincronizarCanal(reservas, canalId, unidadId, eventos, ahora, nuevoId) {
   const propias = eventos.filter((e) => e.uid.endsWith('@' + DOMINIO_UID));
   const ajenas = eventos.filter((e) => !e.uid.endsWith('@' + DOMINIO_UID));
-  const existentes = reservas.filter((r) => r.canal === canalId && r.unidades.includes(unidadId) && r.uidExterno);
+  // Las de este canal que vinieron del calendario de esta cabaña (aunque aquí se hayan reubicado en otra).
+  const deEsteCalendario = (r) => r.canal === canalId && r.uidExterno && unidadDeCanal(r) === unidadId;
+  const existentes = reservas.filter(deEsteCalendario);
   const porUid = new Map(existentes.map((r) => [r.uidExterno, r]));
   const vistos = new Set();
   const nuevas = [], cambiadas = [];
   let lista = reservas.map((r) => {
-    if (r.canal !== canalId || !r.unidades.includes(unidadId) || !r.uidExterno) return r;
+    if (!deEsteCalendario(r)) return r;
     const e = ajenas.find((x) => x.uid === r.uidExterno);
     if (!e) return r;
     vistos.add(e.uid);
@@ -255,13 +288,13 @@ export function sincronizarCanal(reservas, canalId, unidadId, eventos, ahora, nu
   });
   for (const e of ajenas) {
     if (vistos.has(e.uid) || porUid.has(e.uid)) continue;
-    const r = { id: nuevoId(), canal: canalId, unidades: [unidadId], llegada: e.inicio, salida: e.fin, estado: 'confirmada', huesped: null, uidExterno: e.uid, resumen: e.resumen, creada: ahora };
+    const r = { id: nuevoId(), canal: canalId, unidades: [unidadId], unidadCanal: unidadId, llegada: e.inicio, salida: e.fin, estado: 'confirmada', huesped: null, uidExterno: e.uid, resumen: e.resumen, creada: ahora };
     nuevas.push(r);
     lista.push(r);
   }
   const quitadas = [];
   lista = lista.map((r) => {
-    if (r.canal === canalId && r.unidades.includes(unidadId) && r.uidExterno && activa(r) && !ajenas.some((e) => e.uid === r.uidExterno)) {
+    if (deEsteCalendario(r) && activa(r) && !ajenas.some((e) => e.uid === r.uidExterno)) {
       const q = { ...r, estado: 'cancelada', canceladaEn: ahora, motivo: 'ya no viene en el calendario del canal' };
       quitadas.push(q);
       return q;
@@ -269,6 +302,17 @@ export function sincronizarCanal(reservas, canalId, unidadId, eventos, ahora, nu
     return r;
   });
   return { reservas: lista, nuevas, cambiadas, quitadas, ecos: propias.length };
+}
+
+/**
+ * Lo que haría aplicar un .ics leído, sin aplicarlo: nuevas, cambiadas y QUITADAS (lo que el canal ya no manda se
+ * cancela aquí), y si el archivo parece el calendario que exporta este mismo sistema (todo eco o nuestro PRODID):
+ * subir por error el propio en lugar del del canal quitaría todas sus reservas.
+ */
+export function previsualizarImportacion(reservas, canalId, unidadId, leido) {
+  const r = sincronizarCanal(reservas, canalId, unidadId, leido.eventos, 0, () => 'vista-previa');
+  const propio = /alphateklab/i.test(leido.prodid || '');
+  return { ...r, soloEcos: leido.eventos.length > 0 && r.ecos === leido.eventos.length, propio };
 }
 
 export { fechaLarga };
@@ -391,7 +435,7 @@ export function simularReservaOta(aloj, canalId, ahora, hoy) {
   const canal = aloj.canales.find((c) => c.id === canalId);
   const unidad = objetivo.unidades.find((u) => Object.keys(canal.urls).includes(u));
   const r = {
-    id: nuevoIdReserva(), canal: canalId, unidades: [unidad], llegada: objetivo.llegada, salida: objetivo.salida, estado: 'confirmada',
+    id: nuevoIdReserva(), canal: canalId, unidades: [unidad], unidadCanal: unidad, llegada: objetivo.llegada, salida: objetivo.salida, estado: 'confirmada',
     huesped: null, uidExterno: `${Math.random().toString(16).slice(2, 12)}${Math.random().toString(16).slice(2, 12)}@${canalId}.com`,
     resumen: canalId === 'booking' ? 'CLOSED - Not available' : 'Reserved', creada: ahora, simulada: true,
   };

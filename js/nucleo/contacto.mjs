@@ -20,6 +20,16 @@ export function enlaceWhatsApp(e164, texto) {
   return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
 }
 
+/** sms:+50760000123?&body=… (con «?&» lo abren tanto Android como iPhone). */
+export function enlaceSMS(e164, texto) {
+  return `sms:+${String(e164).replace(/\D/g, '')}?&body=${encodeURIComponent(texto)}`;
+}
+
+/** mailto: con asunto y cuerpo. El correo ya viene validado (sin espacios ni comillas). */
+export function enlaceCorreo(correo, asunto, texto) {
+  return `mailto:${String(correo).trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`;
+}
+
 export function mostrarTelefono(e164) {
   const r = normalizarTelefono(e164);
   return r.ok ? r.mostrar : e164;

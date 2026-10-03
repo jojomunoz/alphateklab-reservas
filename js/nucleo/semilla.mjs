@@ -5,7 +5,7 @@
 
 import { MIN, HORA, DIA, fechaISO, msDeFecha, sumarDias, lunesDe, diaSemana, partes, redondearArriba, diferenciaDias } from './tiempo.mjs';
 import { feriado } from './feriados.mjs';
-import { huecosDelDia, tramosDelDia } from './agenda.mjs';
+import { huecosDelDia, tramosDelDia, siguienteMomentoAbierto } from './agenda.mjs';
 import { planificar, VENTANA } from './recordatorios.mjs';
 import { textoConsentimiento, NEGOCIO_ALOJAMIENTO } from './negocios.mjs';
 import { crearEstadoNegocio, componerEnvio, crearTarea, canalesDe } from './operaciones.mjs';
@@ -93,8 +93,10 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
         const huecos = huecosDelDia({ negocio, citas: st.citas, fecha, servicioId: servicio.id, profesionalId: prof.id, ahora: 0 });
         if (!huecos.length) continue;
         const h = huecos[r.entero(0, huecos.length - 1)];
-        let paciente = r.uno(st.pacientes);
-        for (let intento = 0; intento < 5 && usadosHoy.has(paciente.id); intento++) paciente = r.uno(st.pacientes);
+        // Nadie tiene dos citas el mismo día (así nunca hay dos citas de la misma persona a la vez).
+        const libres = st.pacientes.filter((x) => !usadosHoy.has(x.id));
+        if (!libres.length) continue;
+        const paciente = r.uno(libres);
         usadosHoy.add(paciente.id);
         const creada = Math.min(h.inicio - r.entero(2, 9) * DIA + 2 * HORA, ahora - HORA);
         st.citas.push({
@@ -107,10 +109,11 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
     }
   }
 
-  // Estados y mensajes, según si la cita ya pasó.
+  // Estados y mensajes, según si la cita ya pasó. La tarea de llamar cae con el negocio abierto, como en la recepción.
+  const siguienteAbierto = (ms) => siguienteMomentoAbierto(negocio, ms);
   for (const c of st.citas) {
     const pac = st.pacientes.find((p) => p.id === c.pacienteId);
-    const plan = planificar({ ...c, estado: 'pendiente' }, c.regla, c.creada, { canales: canalesDe(pac), ventana: VENTANA });
+    const plan = planificar({ ...c, estado: 'pendiente' }, c.regla, c.creada, { canales: canalesDe(pac), ventana: VENTANA, siguienteAbierto });
     const mensajes = plan.filter((x) => x.tipo === 'mensaje');
     const llamada = plan.find((x) => x.tipo === 'llamar');
     const pasada = c.fin <= ahora;
@@ -146,8 +149,18 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
     if (destino === 'reprogramada') c.historial.push({ t: c.creada + HORA, texto: 'Reprogramada en recepción' });
     if (pasada && destino !== 'cancelada') c.historial.push({ t: c.fin, texto: destino === 'atendida' ? 'Atendida' : 'No asistió' });
 
-    // Confirmada por teléfono al agendarla: nunca tuvo recordatorios (planificar no programa nada para una confirmada).
-    if (destino === 'confirmada' && !respuesta) continue;
+    // Confirmada por teléfono al agendarla: no se le pidió confirmar; recibe solo el aviso, como cualquier cita que
+    // nace confirmada.
+    if (destino === 'confirmada' && !respuesta) {
+      for (const m of planificar({ ...c, estado: 'confirmada' }, c.regla, c.creada, { canales: canalesDe(pac), ventana: VENTANA })) {
+        st.envios.push({
+          id: idSemilla('e'), citaId: c.id, pacienteId: c.pacienteId, tipo: 'mensaje', clase: m.motivo, intento: m.intento, de: m.de,
+          canal: m.canal, etiqueta: m.etiqueta, atrasado: false, momento: m.momento, creado: c.creada,
+          ...(m.momento <= ahora ? { estado: 'enviado', salioEn: m.momento } : { estado: 'programado' }),
+        });
+      }
+      continue;
+    }
     const corte = respuesta ?? (destino === 'cancelada' && pasada ? c.inicio - DIA : Infinity);
     let enviados = 0;
     for (const m of mensajes) {
@@ -184,6 +197,11 @@ export function semillaCitas(negocio, ahora, { urlBase = 'confirmar.html', sala,
     // Quien está ahora mismo en la sala de espera.
     if (destino === 'confirmada' && c.inicio - ahora <= 20 * MIN && c.inicio - ahora >= -10 * MIN) c.enSala = ahora - 6 * MIN;
   }
+  // Una cita que ya empezó no se confirma por teléfono: sus tareas quedan cerradas (como al adelantar el reloj).
+  for (const t of st.tareas) {
+    const c = st.citas.find((x) => x.id === t.citaId);
+    if (!t.hecha && c && c.inicio <= ahora) t.hecha = { t: c.inicio, resultado: 'vencida' };
+  }
   // Textos de lo ya enviado (con enlace), como habrían salido.
   for (const e of st.envios) {
     if (e.estado !== 'enviado') continue;
@@ -219,7 +237,7 @@ export function semillaAlojamiento(ahora, negocio = NEGOCIO_ALOJAMIENTO) {
     huesped: { nombre, telefono, correo: '', personas }, sena: { estado: sena, metodo: 'Yappy' }, creada: ahora - (5 + Math.abs(a)) * DIA,
   });
   const ota = (canal, unidad, a, noches) => ({
-    id: id(), canal, unidades: [unidad], llegada: d(a), salida: d(a + noches), estado: 'confirmada', huesped: null,
+    id: id(), canal, unidades: [unidad], unidadCanal: unidad, llegada: d(a), salida: d(a + noches), estado: 'confirmada', huesped: null,
     uidExterno: uid(canal), resumen: canal === 'booking' ? 'CLOSED - Not available' : canal === 'airbnb' ? 'Reserved' : 'Reservado', creada: ahora - (3 + Math.abs(a) / 2) * DIA,
   });
   const reservas = [
@@ -245,7 +263,9 @@ export function semillaAlojamiento(ahora, negocio = NEGOCIO_ALOJAMIENTO) {
       urls: { corotu: 'https://www.airbnb.com/calendar/ical/00000001.ics?s=ejemplo', nance: 'https://www.airbnb.com/calendar/ical/00000002.ics?s=ejemplo', guayacan: 'https://www.airbnb.com/calendar/ical/00000003.ics?s=ejemplo', caoba: 'https://www.airbnb.com/calendar/ical/00000004.ics?s=ejemplo' } },
     { id: 'booking', nombre: 'Booking.com', intervaloHoras: 2, ultimaSync: ahora - 50 * MIN, maxHoras: 6, caido: false,
       urls: { corotu: 'https://admin.booking.com/hotel/hoteladmin/ical.html?t=ejemplo-1', nance: 'https://admin.booking.com/hotel/hoteladmin/ical.html?t=ejemplo-2', guayacan: 'https://admin.booking.com/hotel/hoteladmin/ical.html?t=ejemplo-3', cuipo: 'https://admin.booking.com/hotel/hoteladmin/ical.html?t=ejemplo-4' } },
-    { id: 'expedia', nombre: 'Expedia', intervaloHoras: 2, ultimaSync: ahora - 100 * MIN, maxHoras: 6, caido: false,
+    // Para Expedia la investigación no da un intervalo con fuente (trabaja sobre todo con channel managers): la demo
+    // simula 2 h y la página lo dice.
+    { id: 'expedia', nombre: 'Expedia', intervaloHoras: 2, intervaloConFuente: false, ultimaSync: ahora - 100 * MIN, maxHoras: 6, caido: false,
       urls: { espave: 'https://www.expediapartnercentral.com/ical/ejemplo-1.ics', cuipo: 'https://www.expediapartnercentral.com/ical/ejemplo-2.ics', caoba: 'https://www.expediapartnercentral.com/ical/ejemplo-3.ics' } },
   ];
   return { negocioId: negocio.id, reservas, canales, cierres: [], bitacora: [{ t: ahora, texto: 'Datos de ejemplo cargados.' }] };

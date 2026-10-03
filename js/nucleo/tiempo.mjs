@@ -136,6 +136,18 @@ export function fechaCorta(isoOMs) {
   return `${DIAS_CORTOS[diaSemana(iso)]} ${dia} ${MESES_CORTOS[mes - 1]}`;
 }
 
+/**
+ * «hoy», «mañana», «ayer» o «sáb 3 oct»: el día de un instante visto desde `ahora` (en Panamá). Para las listas de
+ * recepción, donde una cita de hace dos días no puede leerse como «mañana».
+ */
+export function diaRelativo(ms, ahora) {
+  const d = diferenciaDias(fechaISO(ahora), fechaISO(ms));
+  if (d === 0) return 'hoy';
+  if (d === 1) return 'mañana';
+  if (d === -1) return 'ayer';
+  return fechaCorta(ms);
+}
+
 /** «el martes 6 a las 9:30 a. m.» — para mensajes al paciente. */
 export function cuandoTexto(ms) {
   const iso = fechaISO(ms);

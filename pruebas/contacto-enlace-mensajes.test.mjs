@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizarTelefono, enlaceWhatsApp, validarCedula, validarCorreo, buscarPersonas, primerNombre } from '../js/nucleo/contacto.mjs';
+import { normalizarTelefono, enlaceWhatsApp, enlaceSMS, enlaceCorreo, validarCedula, validarCorreo, buscarPersonas, primerNombre } from '../js/nucleo/contacto.mjs';
 import { codificar, decodificar, aBase64url, deBase64url, ERROR_ENLACE } from '../js/nucleo/enlace.mjs';
 import { rellenar, revisarPlantilla, segmentosSMS, costoDelMes, PLANTILLAS_POR_DEFECTO, balboas, dolares } from '../js/nucleo/mensajes.mjs';
 
@@ -22,6 +22,11 @@ test('teléfono: +507 y 8 dígitos que empiezan por 6, en cualquier formato que 
 test('wa.me va sin «+», sin espacios y con el texto codificado', () => {
   assert.equal(enlaceWhatsApp('+50760000123', 'Hola, ¿vienes el martes 6?'), 'https://wa.me/50760000123?text=Hola%2C%20%C2%BFvienes%20el%20martes%206%3F');
   assert.ok(!enlaceWhatsApp('+507 6000-0123', 'x').includes('+'));
+});
+
+test('un mensaje por SMS o por correo se abre en su canal, no en WhatsApp', () => {
+  assert.equal(enlaceSMS('+50760000123', 'Hola, ¿vienes?'), 'sms:+50760000123?&body=Hola%2C%20%C2%BFvienes%3F');
+  assert.equal(enlaceCorreo('ana@example.com', 'Tu cita', 'Hola, Ana'), 'mailto:ana@example.com?subject=Tu%20cita&body=Hola%2C%20Ana');
 });
 
 test('cédula panameña', () => {
@@ -66,7 +71,9 @@ test('enlace roto, vacío, de otra versión o con forma mala: error que dice qu�
   assert.equal(decodificar(codificar({ ...datosCita, hs: [1, 2, 3, 4] })).ok, false);
   assert.equal(decodificar(codificar({ ...datosCita, s: 'SALA MALA!' })).ok, false);
   assert.equal(decodificar(aBase64url('[1,2]')).ok, false);
-  assert.match(ERROR_ENLACE, /Pide un enlace nuevo al consultorio/);
+  assert.match(ERROR_ENLACE, /Pide un enlace nuevo a quien te lo mandó/, 'sin saber de qué negocio es, no dice «consultorio»');
+  assert.match(decodificar('#%%%', 'a la barbería').error, /Pide un enlace nuevo a la barbería\./);
+  assert.match(decodificar('', 'al consultorio').error, /pide uno nuevo al consultorio\./);
   const oferta = codificar({ k: 'o', pl: 'consultorio', o: 'o_1', e: 'w_1', n: 'Rosa', i: 29823510, pr: 'rios', sv: 'control', sl: 'c1' });
   assert.ok(decodificar(oferta).ok);
 });

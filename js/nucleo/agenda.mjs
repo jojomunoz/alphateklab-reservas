@@ -3,7 +3,7 @@
 
 import { msDeFecha, fechaISO, minutosDelDia, diaSemana, horaTexto, horaDeMinutos, fechaLarga, sumarDias, MIN } from './tiempo.mjs';
 import { feriado } from './feriados.mjs';
-import { solapanConMargen, restar } from './intervalos.mjs';
+import { solapan, solapanConMargen, restar } from './intervalos.mjs';
 
 /** Estados que ocupan el horario. Una cita cancelada libera su hueco. */
 export const ESTADOS_QUE_OCUPAN = new Set(['pendiente', 'confirmada', 'reprogramada', 'atendida', 'no_asistio']);
@@ -38,6 +38,22 @@ export function motivoCierre(negocio, iso) {
   return null;
 }
 
+/**
+ * Primer instante desde `ms` en que el negocio está abierto: el mismo `ms` si cae dentro de un tramo; si no, el
+ * comienzo del siguiente tramo (más tarde ese día o en los días siguientes, saltando cierres y feriados).
+ * null si no abre en los próximos `dias` días. Sirve para que una tarea de recepción no caiga con el negocio cerrado.
+ */
+export function siguienteMomentoAbierto(negocio, ms, dias = 14) {
+  const primero = fechaISO(ms);
+  for (let i = 0; i <= dias; i++) {
+    const fecha = sumarDias(primero, i);
+    for (const [a, b] of tramosDelDia(negocio, fecha)) {
+      if (ms < msDeFecha(fecha, b)) return Math.max(ms, msDeFecha(fecha, a));
+    }
+  }
+  return null;
+}
+
 /** Salas donde se puede dar un servicio, con la sala habitual del profesional primero. */
 export function salasPosibles(negocio, servicio, profesional, salaFija = null) {
   let salas = negocio.salas.map((s) => s.id);
@@ -65,8 +81,9 @@ function ocupadas(citas, filtro, excluirCitaId) {
  * - Cabe entero dentro de un tramo (no cruza el almuerzo ni el cierre).
  * - No pisa citas del profesional ni de la sala, dejando `buffer` minutos a cada lado.
  * - No empieza antes de `ahora` (más la antelación mínima).
+ * - Si se pasa `pacienteId`, no pisa otra cita de esa misma persona (con cualquier profesional).
  */
-export function huecosDelDia({ negocio, citas, fecha, servicioId, profesionalId = null, salaId = null, ahora = 0, excluirCitaId = null }) {
+export function huecosDelDia({ negocio, citas, fecha, servicioId, profesionalId = null, salaId = null, ahora = 0, excluirCitaId = null, pacienteId = null }) {
   const servicio = servicioDe(negocio, servicioId);
   if (!servicio) return [];
   const tramos = tramosDelDia(negocio, fecha);
@@ -75,6 +92,7 @@ export function huecosDelDia({ negocio, citas, fecha, servicioId, profesionalId 
   const dur = servicio.min * MIN;
   const margen = buffer * MIN;
   const desde = ahora + antelacionMin * MIN;
+  const dePersona = pacienteId ? ocupadas(citas, (c) => c.pacienteId === pacienteId, excluirCitaId) : [];
   const salida = [];
   for (const prof of profesionalesPosibles(negocio, servicio, profesionalId)) {
     const delProf = ocupadas(citas, (c) => c.profesionalId === prof.id, excluirCitaId);
@@ -87,6 +105,7 @@ export function huecosDelDia({ negocio, citas, fecha, servicioId, profesionalId 
           const prop = { inicio: t, fin: t + dur };
           if (delProf.some((c) => solapanConMargen(prop, c, margen))) continue;
           if (deSala.some((c) => solapanConMargen(prop, c, margen))) continue;
+          if (dePersona.some((c) => solapan(prop, c))) continue;
           salida.push({ inicio: t, fin: t + dur, profesionalId: prof.id, salaId: salaIdPosible });
         }
       }
@@ -210,6 +229,18 @@ export function validarCita(negocio, citas, prop, ahora = 0, { excluirCitaId = n
       citaId: choqueSala.id,
       mensaje: `${sala.nombre} no está libre de ${horaTexto(choqueSala.inicio)} a ${horaTexto(choqueSala.fin)}`,
     });
+  }
+  // La misma persona no puede estar en dos citas a la vez, aunque sean con profesionales y salas distintos.
+  if (prop.pacienteId) {
+    const choquePersona = ocupadas(citas, (c) => c.pacienteId === prop.pacienteId, excluirCitaId).find((c) => solapan(propI, c));
+    if (choquePersona) {
+      const conQuien = profesionalDe(negocio, choquePersona.profesionalId);
+      errores.push({
+        codigo: 'solape_paciente',
+        citaId: choquePersona.id,
+        mensaje: `Ese ${v.persona || 'paciente'} ya tiene una cita de ${horaTexto(choquePersona.inicio)} a ${horaTexto(choquePersona.fin)}${conQuien ? ` con ${conQuien.nombre}.` : ''}`,
+      });
+    }
   }
   return errores;
 }

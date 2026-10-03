@@ -13,7 +13,7 @@ import { avanzarReloj } from './operaciones.mjs';
 import { actualizarSincronizaciones } from './alojamiento.mjs';
 import { proximoEnvio } from './recordatorios.mjs';
 
-export const VERSION_ESQUEMA = 4;
+export const VERSION_ESQUEMA = 5;
 
 export function nuevaSala(rand = Math.random) {
   const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';

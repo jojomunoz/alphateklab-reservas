@@ -123,7 +123,8 @@ test('el paciente elige otro hueco desde el enlace; si ya se ocupó, queda para 
   assert.equal(r.resultado, 'reprogramada');
   assert.equal(cita.inicio, libre);
   assert.equal(cita.estado, 'confirmada');
-  assert.equal(st.envios.filter((e) => e.citaId === cita.id && e.estado === 'programado').length, 0);
+  // Ya no hay reintentos ni llamada: solo el aviso para la hora nueva (la eligió la persona).
+  assert.deepEqual(st.envios.filter((e) => e.citaId === cita.id && e.estado === 'programado').map((e) => e.clase), ['aviso']);
   // Otro paciente: elige un hueco que ya tomó alguien.
   const otra = crearCita(st, neg, { pacienteId: p2.id, servicioId: 'control', profesionalId: 'rios', salaId: 'c1', inicio: t('2026-10-08', '11:00'), regla }, LUNES).cita;
   const r2 = responder(st, neg, { id: 'c2', citaId: otra.id, tipo: 'cambio', hueco: libre }, t('2026-10-06', '10:05'));
