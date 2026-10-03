@@ -1,28 +1,39 @@
 // Autoagendamiento: servicio → profesional (o el primero disponible) → día → hora libre → datos y consentimiento.
 // La solicitud queda pendiente en recepción (o confirmada, si el negocio lo configuró así).
+// Con #s=<sala> de OTRO navegador, la solicitud viaja por el relevo de pruebas y la página no la da por hecha hasta
+// que la recepción contesta (acuse): las horas de esta página salen de la copia de la demo que tiene este teléfono,
+// que puede tener otro reloj y otras citas.
 
 import { esc, icono, $, mostrarErrores, descargar } from './ui.mjs';
 import { cargar, transaccion, alCambiar } from './almacen.mjs';
 import { iniciarBarra, plantillaCitas } from './demo.mjs';
-import { publicar, AVISO_RELEVO } from './relevo.mjs';
+import { publicar, escuchar, AVISO_RELEVO } from './relevo.mjs';
 import { NEGOCIOS_CITAS, textoConsentimiento } from '../nucleo/negocios.mjs';
-import { fechaISO, fechaLarga, horaTexto, sumarDias, lunesDe, diaSemana, leerISO, DIAS_CORTOS, MESES, MIN } from '../nucleo/tiempo.mjs';
+import { fechaISO, fechaLarga, fechaCorta, horaTexto, sumarDias, lunesDe, leerISO, DIAS_CORTOS, MESES, MIN } from '../nucleo/tiempo.mjs';
 import { huecosDelDia, horasUnicas, motivoCierre, servicioDe, profesionalDe } from '../nucleo/agenda.mjs';
-import { solicitarCita, negocioEfectivo } from '../nucleo/operaciones.mjs';
-import { mensajeSolicitud } from '../nucleo/mensajes-relevo.mjs';
+import { solicitarCita, negocioEfectivo, revisarDatosPersona } from '../nucleo/operaciones.mjs';
+import { mensajeSolicitud, esAcuseDe } from '../nucleo/mensajes-relevo.mjs';
+import { CANALES } from '../nucleo/recordatorios.mjs';
 import { balboas } from '../nucleo/mensajes.mjs';
 import { exportarCita } from '../nucleo/ical.mjs';
 import { pintarHoras } from './componentes-citas.mjs';
 import { mostrarTelefono } from '../nucleo/contacto.mjs';
 
 let plantilla = plantillaCitas();
-const salaRemota = (() => { const s = new URLSearchParams(location.hash.slice(1)).get('s'); return /^[a-z0-9]{10}$/.test(s || '') ? s : null; })();
+const salaDelEnlace = (() => { const s = new URLSearchParams(location.hash.slice(1)).get('s'); return /^[a-z0-9]{10}$/.test(s || '') ? s : null; })();
 const eleccion = { servicioId: null, profesionalId: null, fecha: null, inicio: null };
 const main = $('#principal');
+const ESPERA_ACUSE_MS = 20000;
+let dejarDeEsperar = null;
 
 function negocioActual() {
   const estado = cargar();
   return { estado, negocio: NEGOCIOS_CITAS[plantilla], st: estado.negocios[plantilla], ahora: estado.reloj.ahora };
+}
+
+/** La sala de otro navegador, o null si el enlace no trae sala o es la de este mismo navegador. */
+function salaRemota() {
+  return salaDelEnlace && salaDelEnlace !== cargar().sala ? salaDelEnlace : null;
 }
 
 function pintarMarcaPaciente(negocio) {
@@ -52,6 +63,7 @@ function htmlDias(negocio, st, ahora) {
 function pintar() {
   const { negocio, st, ahora } = negocioActual();
   const v = negocio.vocab;
+  const remota = salaRemota();
   pintarMarcaPaciente(negocio);
   document.title = `Pedir cita · ${negocio.nombre} (${negocio.rotulo})`;
   const s = eleccion.servicioId ? servicioDe(negocio, eleccion.servicioId) : null;
@@ -60,7 +72,7 @@ function pintar() {
   const mes = (f) => MESES[leerISO(f).mes - 1];
   main.innerHTML = `
     <h1>Pide tu cita</h1>
-    <p class="paciente__intro">${esc(negocio.nombre)} · ${esc(negocio.direccion)}. La recepción ${negocio.ajustes.autoConfirmar || st.ajustes.autoConfirmar ? 'te la confirma al momento' : 'la confirma y te escribe por WhatsApp'}.</p>
+    <p class="paciente__intro">${esc(negocio.nombre)} · ${esc(negocio.direccion)}. ${negocioEfectivo(negocio, st).ajustes.autoConfirmar ? 'La cita queda confirmada al momento.' : 'La recepción la confirma y te escribe por WhatsApp.'}</p>
     <form class="pasos" novalidate data-form>
       <div class="resumen-errores" data-errores tabindex="-1" hidden></div>
       <fieldset class="paso">
@@ -81,6 +93,7 @@ function pintar() {
       </fieldset>
       <fieldset class="paso${paso4 ? '' : ' paso--bloqueado'}">
         <legend><span class="paso__num">Paso 4 de 5</span>Hora${eleccion.fecha ? ` · ${esc(fechaLarga(eleccion.fecha))}` : ''}</legend>
+        ${remota ? '<p class="campo__ayuda">Estas horas salen de la copia de la agenda que tiene este teléfono; la recepción confirma con la suya.</p>' : ''}
         <div data-horas></div>
       </fieldset>
       <fieldset class="paso${paso5 ? '' : ' paso--bloqueado'}">
@@ -93,7 +106,7 @@ function pintar() {
           <label class="opcion"><input type="checkbox" name="consentimiento"> <span>${esc(textoConsentimiento(negocio))}</span></label>
         </div>
         ${eleccion.inicio && s ? `<div class="resumen-pedido"><span>${esc(s.nombre)} · ${s.min} min · ${balboas(s.precio * 100)}</span><strong>${esc(fechaLarga(eleccion.inicio).replace(/^./, (c) => c.toUpperCase()))}, ${esc(horaTexto(eleccion.inicio))}</strong><span>${eleccion.profesionalId ? esc(profesionalDe(negocio, eleccion.profesionalId).nombre) : 'El primero disponible'}</span></div>` : ''}
-        <p class="nota nota--relevo">Demo: escribe datos inventados. ${salaRemota ? esc(AVISO_RELEVO) : 'La solicitud queda en este navegador.'}</p>
+        <p class="nota nota--relevo">Demo: escribe datos inventados. ${remota ? esc(AVISO_RELEVO) : 'La solicitud queda en este navegador.'}</p>
         <div class="enviar-fijo"><button type="submit" class="boton boton--primario boton--grande">Pedir la cita</button></div>
       </fieldset>
     </form>
@@ -130,30 +143,62 @@ function leerPersona() {
 function ponerPersona(p) {
   if (!p) return;
   const f = main.querySelector('[data-form]');
+  if (!f) return;
   for (const k of ['nombre', 'cedula', 'telefono', 'correo']) f.elements[k].value = p[k];
   f.elements.consentimiento.checked = p.consentimiento;
 }
 
+let personaGuardada = null;
+
 main.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const form = ev.target;
+  if (!form.matches('[data-form]')) return;
   const persona = leerPersona();
-  if (!eleccion.servicioId || !eleccion.inicio) { mostrarErrores(form, [{ mensaje: 'Elige el servicio, el día y la hora.' }]); return; }
-  const r = transaccion((e) => solicitarCita(e.negocios[plantilla], NEGOCIOS_CITAS[plantilla], { persona, servicioId: eleccion.servicioId, profesionalId: eleccion.profesionalId, inicio: eleccion.inicio }, e.reloj.ahora), 'autoagenda');
-  if (!r.ok) {
-    mostrarErrores(form, r.errores);
-    if (r.errores.some((e) => /se acaba de ocupar/.test(e.mensaje))) { eleccion.inicio = null; }
+  if (!eleccion.servicioId || !eleccion.inicio) { mostrarErrores(form, [{ mensaje: 'Elige el servicio, el día y la hora.' }], { titulo: 'Falta elegir:' }); return; }
+  const remota = salaRemota();
+  if (remota) {
+    // La agenda está en otro dispositivo: aquí solo se revisa el formulario; no se guarda nada en este teléfono.
+    const { ahora } = negocioActual();
+    const errores = revisarDatosPersona(persona, ahora).errores;
+    if (errores.length) { mostrarErrores(form, errores); return; }
+    personaGuardada = persona;
+    await enviarRemota(remota, persona);
     return;
   }
-  let relevo = null;
-  if (salaRemota) {
-    relevo = await publicar(salaRemota, mensajeSolicitud({ id: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, pl: plantilla, cita: { servicioId: eleccion.servicioId, profesionalId: eleccion.profesionalId, inicio: Math.round(eleccion.inicio / MIN) }, paciente: persona }));
+  const r = transaccion((e) => solicitarCita(e.negocios[plantilla], NEGOCIOS_CITAS[plantilla], { persona, servicioId: eleccion.servicioId, profesionalId: eleccion.profesionalId, inicio: eleccion.inicio }, e.reloj.ahora), 'autoagenda');
+  if (!r.ok) {
+    if (r.errores.some((e) => ['solape_profesional', 'solape_sala', 'pasado', 'solape_paciente'].includes(e.codigo))) {
+      // La hora ya no sirve: se vuelven a pintar las horas libres (sin ella) y se dice por qué.
+      eleccion.inicio = null;
+      pintar();
+      ponerPersona(persona);
+      mostrarErrores(main.querySelector('[data-form]'), r.errores);
+      return;
+    }
+    mostrarErrores(form, r.errores);
+    return;
   }
-  pintarListo(r.cita, r.paciente, relevo);
+  pintarListo(r.cita, r.paciente);
 });
 
-function pintarListo(cita, paciente, relevo) {
-  const { negocio } = negocioActual();
+/** Lo que la persona puede esperar, sacado de lo que de verdad quedó programado para su cita. */
+function queSigue(st, cita, negocio, telefono) {
+  const proximo = st.envios.filter((e) => e.citaId === cita.id && e.tipo === 'mensaje' && e.estado === 'programado').sort((a, b) => a.momento - b.momento)[0];
+  const tel = mostrarTelefono(negocio.telefono);
+  if (proximo) {
+    const cuando = `el ${fechaCorta(proximo.momento)} a las ${horaTexto(proximo.momento)}`;
+    return proximo.clase === 'aviso'
+      ? `Te escribiremos por ${CANALES[proximo.canal]} ${cuando} para recordártela. Si no puedes ir, avísanos desde ese mensaje o llama al ${tel}.`
+      : `Te escribiremos por ${CANALES[proximo.canal]} a ${mostrarTelefono(telefono)} ${cuando} para confirmarla. Si no puedes ir, avísanos desde ese mensaje.`;
+  }
+  return cita.estado === 'confirmada'
+    ? `Si no puedes ir, avísanos al ${tel}.`
+    : `Queda pendiente en la recepción. Si no puedes ir, avísanos al ${tel}.`;
+}
+
+function pintarListo(cita, paciente) {
+  const { negocio, st } = negocioActual();
   const confirmada = cita.estado === 'confirmada';
   main.innerHTML = `
     <h1>Listo, ${esc(paciente.nombre.split(' ')[0])}</h1>
@@ -161,18 +206,80 @@ function pintarListo(cita, paciente, relevo) {
       <p class="resultado__titulo">${icono('confirmada')} ${confirmada ? 'Tu cita quedó confirmada' : 'Tu solicitud llegó a la recepción'}</p>
       <p><strong>${esc(fechaLarga(cita.inicio).replace(/^./, (c) => c.toUpperCase()))}, ${esc(horaTexto(cita.inicio))}</strong></p>
       <p>${esc(servicioDe(negocio, cita.servicioId).nombre)} con ${esc(profesionalDe(negocio, cita.profesionalId).nombre)}.</p>
-      <p>${confirmada ? 'Te escribiremos por WhatsApp un día antes para recordártela.' : `Te escribiremos por WhatsApp a ${esc(mostrarTelefono(paciente.telefono))} para confirmarla. Si no puedes ir, avísanos desde ese mensaje.`}</p>
-      ${relevo ? `<p class="entrega" data-estado="${relevo.ok ? 'ok' : 'error'}">${relevo.ok ? 'Enviada también a la pantalla de recepción por el relevo de pruebas.' : `No llegó a la otra pantalla (${esc(relevo.error)}); quedó en este navegador.`}</p>` : ''}
-      <div class="acciones"><button type="button" class="boton" data-ics>${icono('descargar')} Agregar a mi calendario (.ics)</button><a class="boton" href="reservar.html${salaRemota ? `#s=${salaRemota}` : ''}" data-otra>Pedir otra cita</a></div>
+      <p>${esc(queSigue(st, cita, negocio, paciente.telefono))}</p>
+      <div class="acciones"><button type="button" class="boton" data-ics>${icono('descargar')} Agregar a mi calendario (.ics)</button><a class="boton" href="reservar.html" data-otra>Pedir otra cita</a></div>
     </div>
     <p class="pie-paciente">¿Eres de la recepción? Mira la cita en la <a href="citas.html">agenda</a>.</p>`;
   main.querySelector('.resultado').focus();
   main.querySelector('[data-ics]').addEventListener('click', () => {
     descargar(`cita-${fechaISO(cita.inicio)}.ics`, exportarCita({ uid: `${cita.id}@reservas.alphateklab`, inicio: cita.inicio, fin: cita.fin, dtstamp: Date.now(), resumen: `Cita en ${negocio.nombre}`, lugar: negocio.direccion, descripcion: `${negocio.nombre} (${negocio.rotulo}).` }));
   });
-  main.querySelector('[data-otra]').addEventListener('click', (e) => { e.preventDefault(); Object.assign(eleccion, { servicioId: null, profesionalId: null, fecha: null, inicio: null }); pintar(); });
+  main.querySelector('[data-otra]').addEventListener('click', (e) => { e.preventDefault(); reiniciar(); });
 }
 
-iniciarBarra({ pagina: 'reservar.html', tipo: 'citas', alCambiarPlantilla: (id) => { plantilla = id; Object.assign(eleccion, { servicioId: null, profesionalId: null, fecha: null, inicio: null }); pintar(); } });
+function reiniciar() {
+  if (dejarDeEsperar) { dejarDeEsperar(); dejarDeEsperar = null; }
+  Object.assign(eleccion, { servicioId: null, profesionalId: null, fecha: null, inicio: null });
+  personaGuardada = null;
+  pintar();
+}
+
+// ── Solicitud a una recepción en otro dispositivo ─────────────────────
+
+async function enviarRemota(sala, persona) {
+  const { negocio } = negocioActual();
+  const id = `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  const pedido = { ...eleccion };
+  pintarRemota({ estado: 'enviando', pedido, negocio, persona });
+  const pub = await publicar(sala, mensajeSolicitud({ id, pl: plantilla, cita: { servicioId: pedido.servicioId, profesionalId: pedido.profesionalId, inicio: Math.round(pedido.inicio / MIN) }, paciente: persona }));
+  if (!pub.ok) { pintarRemota({ estado: 'fallida', pedido, negocio, persona, error: pub.error }); return; }
+  pintarRemota({ estado: 'esperando', pedido, negocio, persona });
+  let listo = false;
+  const reloj = setTimeout(() => { if (!listo) pintarRemota({ estado: 'sin-respuesta', pedido, negocio, persona }); }, ESPERA_ACUSE_MS);
+  const cerrar = escuchar(sala, (m) => {
+    if (listo || !esAcuseDe(m, id)) return;
+    listo = true;
+    clearTimeout(reloj);
+    cerrar();
+    dejarDeEsperar = null;
+    pintarRemota({ estado: m.resultado === 'creada' ? 'creada' : 'rechazada', pedido, negocio, persona, acuse: m });
+  }, () => {}, { desde: pub.idRelevo });
+  dejarDeEsperar = () => { listo = true; clearTimeout(reloj); cerrar(); };
+}
+
+function pintarRemota({ estado, pedido, negocio, persona, error = null, acuse = null }) {
+  const nombre = persona.nombre.trim().split(/\s+/)[0] || '';
+  const inicio = acuse && Number.isInteger(acuse.inicio) ? acuse.inicio * MIN : pedido.inicio;
+  const servicio = servicioDe(negocio, pedido.servicioId);
+  const prof = pedido.profesionalId ? profesionalDe(negocio, pedido.profesionalId).nombre : 'el primero disponible';
+  const tel = esc(mostrarTelefono(negocio.telefono));
+  const cuando = `<p><strong>${esc(fechaLarga(inicio).replace(/^./, (c) => c.toUpperCase()))}, ${esc(horaTexto(inicio))}</strong></p><p>${esc(servicio.nombre)} con ${esc(prof)}.</p>`;
+  const entrega = (e, t) => `<p class="entrega" data-estado="${e}" role="status">${esc(t)}</p>`;
+  const caja = {
+    enviando: ['enviado', 'reloj', 'Enviando tu solicitud', cuando + entrega('enviando', 'Avisando a la recepción…')],
+    esperando: ['enviado', 'reloj', 'Enviamos tu solicitud', `${cuando}<p>La recepción revisa que la hora siga libre en su agenda y te contesta aquí mismo.</p>${entrega('enviando', 'Enviada por el relevo de pruebas. Esperando la respuesta de la recepción…')}`],
+    'sin-respuesta': ['enviado', 'reloj', 'Enviamos tu solicitud', `${cuando}${entrega('enviando', `La pantalla de recepción no ha contestado todavía (puede estar cerrada). La verá al abrirla; si es urgente, llama al ${mostrarTelefono(negocio.telefono)}.`)}`],
+    creada: ['ok', 'confirmada', acuse && acuse.estado === 'confirmada' ? 'Tu cita quedó confirmada' : 'Tu solicitud llegó a la recepción', `${cuando}<p>${acuse && acuse.estado === 'confirmada' ? `Si no puedes ir, avísanos al ${tel}.` : 'Queda pendiente: la recepción te escribe por WhatsApp para confirmarla.'}</p>${entrega('ok', 'La recepción la recibió y su agenda ya la muestra.')}`],
+    rechazada: ['aviso', 'aviso', 'La recepción no pudo agendarla', `${cuando}<p>${esc(acuse && acuse.motivo ? acuse.motivo : 'Esa hora ya no está libre en su agenda.')}</p><div class="acciones"><button type="button" class="boton boton--primario" data-otra-hora>Elegir otra hora</button></div>`],
+    fallida: ['aviso', 'aviso', 'Tu solicitud no llegó a la recepción', `${cuando}<p>No pudimos enviarla${error ? ` (${esc(error)})` : ''}. Vuelve a intentarlo o llama al ${tel}.</p><div class="acciones"><button type="button" class="boton boton--primario" data-otra-hora>Volver a intentarlo</button></div>`],
+  }[estado];
+  main.innerHTML = `
+    <h1>${estado === 'creada' ? `Listo, ${esc(nombre)}` : `Hola, ${esc(nombre)}`}</h1>
+    <div class="resultado resultado--${caja[0]}" tabindex="-1">
+      <p class="resultado__titulo">${icono(caja[1])} ${esc(caja[2])}</p>
+      ${caja[3]}
+    </div>
+    <div class="pie-paciente"><p>${esc(AVISO_RELEVO)}</p><p>Página de ejemplo hecha por alphateklab. ${esc(negocio.nombre)} es un negocio ficticio.</p></div>`;
+  const res = main.querySelector('.resultado');
+  if (['esperando', 'creada', 'rechazada', 'fallida'].includes(estado)) res.focus();
+  main.querySelector('[data-otra-hora]')?.addEventListener('click', () => {
+    if (estado === 'rechazada') eleccion.inicio = null;
+    pintar();
+    ponerPersona(personaGuardada);
+    (main.querySelector('[name="hora"]') || main.querySelector('[name="servicio"]'))?.focus();
+  });
+}
+
+iniciarBarra({ pagina: 'reservar.html', tipo: 'citas', alCambiarPlantilla: (id) => { plantilla = id; reiniciar(); } });
 pintar();
-alCambiar((e, info) => { if (!info.local) { const p = leerPersona(); pintar(); ponerPersona(p); } });
+alCambiar((e, info) => { if (!info.local && main.querySelector('[data-form]')) { const p = leerPersona(); pintar(); ponerPersona(p); } });
