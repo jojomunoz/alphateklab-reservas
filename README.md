@@ -114,6 +114,18 @@ node herramientas/capturas.mjs --completa  # 7 vistas × 390/1280 × claro/oscur
 node herramientas/mutaciones.mjs           # rompe el código a propósito y comprueba que las pruebas fallan
 ```
 
+## Lo que no se probó
+
+- **Safari ni WebKit.** Playwright no arranca WebKit en la máquina de desarrollo (Fedora 44: faltan `libicu74` y
+  `libjpeg-turbo8`). Todo lo verificado es Chromium.
+- **Un teléfono real.** Los recorridos usan un Chromium con pantalla de 390 px y toque emulado.
+- **Lector de pantalla.** Hay etiquetas, regiones vivas y orden de foco probados con teclado, pero no se pasó con
+  NVDA, VoiceOver ni TalkBack.
+- **El relevo ntfy.sh depende de un servidor público.** Funcionó entre dos procesos de Chromium separados (1,4 s), pero
+  ntfy.sh limita las conexiones por IP (responde 429) si se abren muchas seguidas; entonces la demo dice «sin
+  conexión» y sigue en el mismo dispositivo.
+- **Envío real de WhatsApp, SMS o correo.** No hay servidor: «Abrir en WhatsApp» solo abre `wa.me` con el texto.
+
 ## Estructura
 
 ```
