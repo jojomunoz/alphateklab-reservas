@@ -17,7 +17,21 @@ export function opcionesEnlace(estado) {
   return { urlBase: urlConfirmar(), sala: estado.sala };
 }
 
-export function hayAlmacenamiento() { return almacenamientoOk; }
+/**
+ * ¿Este navegador deja guardar? Se prueba de verdad (leer y escribir), no se deduce de lo último que pasó: la
+ * barra de la demo se pinta antes de leer los datos en algunas vistas.
+ */
+export function hayAlmacenamiento() {
+  try {
+    const k = 'atk-reservas-prueba';
+    localStorage.setItem(k, '1');
+    localStorage.removeItem(k);
+    return almacenamientoOk;
+  } catch {
+    almacenamientoOk = false;
+    return false;
+  }
+}
 
 function leerCrudo() {
   try {

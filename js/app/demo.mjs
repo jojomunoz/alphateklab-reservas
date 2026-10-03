@@ -49,7 +49,7 @@ export function iniciarBarra({ pagina, tipo, alCambiarPlantilla }) {
   const cont = document.getElementById('barra-demo');
   cont.innerHTML = `
     <div class="barra-demo__dentro">
-      <p class="barra-demo__titulo"><a class="barra-demo__logo" href="../alphateklab/"><img src="assets/marca/logo-oscuro.svg" alt="alphateklab" width="98" height="22"></a><strong>Reservas</strong><span class="barra-demo__sep" aria-hidden="true">·</span><span class="barra-demo__sub">demo con negocios de ejemplo</span></p>
+      <p class="barra-demo__titulo"><a class="barra-demo__logo" href="../alphateklab/"><img src="assets/marca/logo-oscuro.svg" alt="alphateklab, inicio" width="98" height="22"></a><strong>Reservas</strong><span class="barra-demo__sep" aria-hidden="true">·</span><span class="barra-demo__sub">demo con negocios de ejemplo</span></p>
       <button type="button" class="boton barra-demo__menu" aria-expanded="false" aria-controls="barra-demo-mas">Opciones de la demo</button>
       <div class="barra-demo__mas" id="barra-demo-mas">
         <label>Plantilla

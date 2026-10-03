@@ -19,12 +19,13 @@
 .segmentado button + button { border-left: 1px solid var(--linea-fuerte); }
 .segmentado button[aria-pressed="true"] { background: var(--primario-suave); color: var(--primario-texto); box-shadow: inset 0 -3px 0 var(--primario); }
 @media (hover: hover) and (pointer: fine) { .segmentado button:hover { color: var(--tinta); } }
-.resumen-hoy { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.875rem; margin-bottom: 10px; }
-.resumen-hoy a { color: var(--tinta-2); font-weight: 600; }
+.resumen-hoy { display: flex; flex-wrap: wrap; align-items: center; gap: 0 14px; font-size: 0.875rem; margin-bottom: 10px; }
+.resumen-hoy a { color: var(--tinta-2); font-weight: 600; display: inline-flex; align-items: center; min-height: 44px; }
 @media (min-width: 1100px) { .resumen-hoy { display: none; } }
 
 /* ── Disposición: agenda + columna de recepción ─────────────────────── */
-.disposicion { display: grid; gap: 24px; }
+/* minmax(0, 1fr): la columna no se estira al ancho mínimo de su contenido (a 320 px la leyenda la desbordaba). */
+.disposicion { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1100px) {
   .disposicion { grid-template-columns: minmax(0, 1fr) 330px; align-items: start; }
   .lateral { position: sticky; top: 12px; max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
@@ -36,7 +37,8 @@
 /* ── La agenda ──────────────────────────────────────────────────────── */
 .agenda-scroll { overflow-x: auto; border: 1px solid var(--linea); background: var(--superficie); overscroll-behavior-x: contain; }
 .agenda { --escala: 1.8px; display: grid; grid-template-columns: 52px repeat(var(--columnas), minmax(var(--min-col, 136px), 1fr)); min-width: min-content; }
-.agenda--semana { --escala: 1.25px; --min-col: 58px; }
+/* En la semana, 1.3 px por minuto: una cita de 20 min mide 24 px, el mínimo para tocarla. */
+.agenda--semana { --escala: 1.3px; --min-col: 58px; }
 .agenda__cabeza { position: sticky; top: 0; z-index: 3; background: var(--superficie); border-bottom: 1px solid var(--linea-fuerte); padding: 8px 8px; font-size: 0.8125rem; font-weight: 700; color: var(--tinta-2); min-height: 44px; display: flex; flex-direction: column; justify-content: center; line-height: 1.25; }
 .agenda__cabeza small { font-weight: 500; color: var(--tinta-3); }
 .agenda__cabeza--dia { grid-column: span var(--carriles); border-left: 1px solid var(--linea-fuerte); padding: 0; }
@@ -47,6 +49,8 @@
 .agenda__horas { position: relative; border-right: 1px solid var(--linea); }
 .agenda__hora { position: absolute; right: 6px; transform: translateY(-50%); font-size: 0.75rem; color: var(--tinta-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .agenda__hora:first-child { transform: translateY(2px); }
+/* La última hora (el cierre) va por encima del borde, no cortada a la mitad. */
+.agenda__hora--ultima { transform: translateY(calc(-100% - 2px)); }
 .columna { position: relative; border-left: 1px solid var(--linea); background-image: repeating-linear-gradient(to bottom, var(--linea) 0 1px, transparent 1px calc(var(--escala) * 60)); }
 .columna--primera-del-dia { border-left-color: var(--linea-fuerte); }
 .columna--hoy { background-color: color-mix(in srgb, var(--primario-suave) 30%, transparent); }
@@ -57,6 +61,10 @@
 
 .libre { position: absolute; left: 3px; right: 3px; z-index: 1; border: 1px dashed var(--linea-fuerte); background: transparent; color: var(--tinta-3); font-size: 0.75rem; font-weight: 600; text-align: left; padding: 3px 6px; cursor: pointer; overflow: hidden; border-radius: var(--r-insignia); display: flex; align-items: flex-start; gap: 4px; }
 .libre .ico { font-size: 0.85rem; margin-top: 1px; }
+/* En la semana, el hueco es una franja punteada sin texto: se ve y se toca igual (abre «Agendar»). */
+.libre--semana { left: 2px; right: 2px; padding: 0; border-color: color-mix(in srgb, var(--primario) 50%, transparent); background: color-mix(in srgb, var(--primario-suave) 60%, transparent); }
+.libre--muestra { position: static; display: inline-flex; padding: 0 6px; min-height: 18px; min-width: 26px; vertical-align: -3px; }
+.leyenda__libre { display: inline-flex; align-items: center; gap: 6px; }
 @media (hover: hover) and (pointer: fine) { .libre:hover { border-color: var(--primario); color: var(--primario-texto); background: var(--primario-suave); } }
 
 .bloque {
@@ -73,6 +81,12 @@
 .bloque .estado { flex: none; font-size: 0.75rem; padding: 1px 5px 1px 3px; }
 .bloque--corto { flex-direction: row; align-items: center; gap: 5px; padding-top: 1px; padding-bottom: 1px; }
 .bloque--corto .bloque__meta, .bloque--corto .estado__texto { display: none; }
+/* En el teléfono las columnas son angostas: el servicio y el consultorio se parten en dos líneas en vez de cortarse. */
+@media (max-width: 599px) {
+  .agenda:not(.agenda--semana) .bloque:not(.bloque--corto) .bloque__linea:last-child { white-space: normal; align-items: flex-start; }
+  .agenda:not(.agenda--semana) .bloque:not(.bloque--corto) .bloque__meta { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.15; }
+  .agenda:not(.agenda--semana) .bloque:not(.bloque--corto) .estado__texto { display: none; }
+}
 .bloque--corto .estado { padding: 1px 3px; }
 .bloque--pendiente, .bloque--reprogramada { background: var(--aviso-fondo); border-color: color-mix(in srgb, var(--aviso) 55%, var(--superficie)); }
 .bloque--confirmada { background: var(--ok-fondo); border-color: color-mix(in srgb, var(--ok) 55%, var(--superficie)); }
@@ -104,12 +118,6 @@
 /* ── Diálogos de cita, paciente, registro ───────────────────────────── */
 .bloque-dialogo + .bloque-dialogo { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--linea); }
 .bloque-dialogo h3 { font-size: 1rem; margin-bottom: 8px; }
-.formulario { display: grid; gap: 14px; }
-.formulario__fila { display: grid; gap: 14px; }
-@media (min-width: 560px) { .formulario__fila--2 { grid-template-columns: 1fr 1fr; } .formulario__fila--3 { grid-template-columns: 1fr 1fr 1fr; } .formulario__fila--servicio { grid-template-columns: 1.8fr 1.2fr 1fr; } }
-.consentimiento { background: var(--superficie-2); padding: 12px 14px; display: grid; gap: 6px; font-size: 0.9375rem; }
-.consentimiento .opcion { padding: 4px 0; min-height: 0; }
-.consentimiento__texto { color: var(--tinta-2); font-size: 0.875rem; }
 
 .buscador { position: relative; }
 .resultados { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--linea); max-height: 260px; overflow-y: auto; overscroll-behavior: contain; background: var(--superficie); }
@@ -159,6 +167,7 @@
 .rejilla-riesgo > * { min-width: 0; }
 @media (min-width: 900px) { .rejilla-riesgo { grid-template-columns: 1fr 1fr; } .rejilla-riesgo .ancho { grid-column: 1 / -1; } }
 .barra-tasa { display: grid; grid-template-columns: 1fr; gap: 3px; min-width: 140px; }
+@media (max-width: 599px) { .tabla--apilable .barra-tasa { min-width: 0; } }
 .barra-tasa__pista { height: 8px; background: var(--superficie-2); position: relative; }
 .barra-tasa__valor { position: absolute; inset: 0 auto 0 0; background: var(--primario); }
 .barra-tasa--mala .barra-tasa__valor { background: var(--peligro); }
@@ -171,11 +180,15 @@
 .reloj__etiqueta { font-size: 0.8125rem; font-weight: 650; color: var(--tinta-3); }
 .reloj__hora { font-family: var(--f-titulo); font-weight: var(--peso-titulo); font-size: clamp(1.75rem, 5vw, 2.75rem); line-height: 1.05; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .reloj__fecha { font-size: 1.0625rem; color: var(--tinta-2); font-weight: 600; }
-.reloj__botones { display: flex; flex-wrap: wrap; gap: 8px; }
-.reloj__botones .boton { white-space: nowrap; }
+.reloj__botones { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+/* El botón «Hasta el próximo envío (…)» lleva una fecha: se parte en dos líneas antes que salirse del panel. */
+.reloj__botones .boton { white-space: normal; }
 .reloj__nota { font-size: 0.875rem; color: var(--tinta-3); }
 
-.riel { position: relative; height: 120px; margin: 4px 0 0; }
+.riel__alcance { font-size: 0.875rem; color: var(--tinta-2); margin-bottom: 4px; }
+.riel__alcance strong { font-variant-numeric: tabular-nums; color: var(--tinta); }
+/* overflow-x: clip: la aguja ocupa todo el ancho y se corre con transform; no puede agregar scroll lateral. */
+.riel { position: relative; height: 120px; margin: 4px 0 0; overflow-x: clip; }
 .riel__pista { position: absolute; left: 0; right: 0; top: 40px; height: 30px; background: var(--superficie-2); }
 .riel__ventana { position: absolute; top: 40px; height: 30px; background: var(--primario-suave); border-left: 1px solid color-mix(in srgb, var(--primario) 35%, transparent); border-right: 1px solid color-mix(in srgb, var(--primario) 35%, transparent); }
 .riel__dia { position: absolute; top: 96px; font-size: 0.75rem; color: var(--tinta-3); white-space: nowrap; transform: translateX(-50%); }
@@ -187,8 +200,10 @@
 .riel__marca--llamar { color: var(--aviso); }
 .riel__marca--tarea { border-radius: 2px; border-color: var(--aviso); background: var(--aviso); color: var(--superficie); }
 .riel__marca--sms { border-radius: 3px; }
-.riel__ahora { position: absolute; top: 0; bottom: 30px; width: 0; border-left: 2px solid var(--peligro); transition: left var(--dur-vista) var(--ease-mover); }
+/* La aguja: un elemento del ancho del riel cuyo borde izquierdo marca la hora; viaja con transform (no con left). */
+.riel__ahora { position: absolute; top: 0; bottom: 30px; left: 0; width: 100%; border-left: 2px solid var(--peligro); pointer-events: none; transition: transform var(--dur-vista) var(--ease-mover); }
 .riel__ahora span { position: absolute; top: 0; left: 6px; font-size: 0.75rem; font-weight: 700; color: var(--peligro); white-space: nowrap; background: var(--superficie); padding: 0 3px; }
+.riel__ahora--fin span { left: auto; right: calc(100% + 6px); }
 .riel__leyenda { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.8125rem; color: var(--tinta-3); align-items: center; }
 .riel__muestra { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--primario); vertical-align: -2px; margin-right: 4px; }
 .riel__muestra--enviado { background: var(--primario); }
@@ -212,7 +227,9 @@
 .envio--nuevo { animation: recien var(--dur-vista) var(--ease-salida); }
 @keyframes recien { from { background: var(--primario-suave); } to { background: transparent; } }
 .grupo-dia { padding: 6px 16px; background: var(--superficie-2); font-size: 0.8125rem; font-weight: 700; color: var(--tinta-2); position: sticky; top: 0; z-index: 1; }
+/* Scroll propio solo en pantallas anchas (lo pone el JS desde 1000 px); en el teléfono, por tandas. */
 .lista-scroll { max-height: 560px; overflow-y: auto; overscroll-behavior: contain; }
+.mas-lista { padding: 10px 16px; border-top: 1px solid var(--linea); }
 .bitacora { list-style: none; margin: 0; padding: 0; font-size: 0.875rem; }
 .bitacora li { padding: 6px 16px; border-bottom: 1px solid var(--linea); display: grid; grid-template-columns: 5.5rem 1fr; gap: 10px; }
 .bitacora time { color: var(--tinta-3); font-variant-numeric: tabular-nums; }
@@ -221,12 +238,23 @@
 .variables button { min-height: 36px; padding: 0 8px; border: 1px dashed var(--linea-fuerte); background: var(--superficie); border-radius: var(--r-insignia); font-size: 0.8125rem; cursor: pointer; color: var(--tinta-2); }
 @media (pointer: coarse) { .variables button { min-height: 44px; } }
 .vista-previa { background: var(--superficie-2); padding: 10px 12px; font-size: 0.875rem; overflow-wrap: anywhere; color: var(--tinta-2); }
+/* Las plantillas crecen con su texto: a 390 px, 88 px cortaban el mensaje a media línea. */
+[data-form-plantillas] textarea { field-sizing: content; min-height: 88px; }
+.ajustes-agenda { margin-top: 12px; border-top: 1px solid var(--linea); }
+.ajustes-agenda > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-weight: 600; font-size: 0.9375rem; color: var(--tinta-2); }
+.ajustes-agenda > summary::-webkit-details-marker { display: none; }
+.ajustes-agenda__marca { transition: transform var(--dur-estado) var(--ease-salida); }
+.ajustes-agenda[open] .ajustes-agenda__marca { transform: rotate(90deg); }
+.ajustes-agenda__cuerpo { display: grid; gap: 10px; padding: 4px 0 12px; max-width: 46rem; }
+.ajustes-agenda__cuerpo select { max-width: 16rem; }
+@media (prefers-reduced-motion: reduce) { .ajustes-agenda__marca { transition: none; } }
 .qr { display: grid; gap: 8px; justify-items: start; }
 .qr svg, .qr img { width: 180px; height: 180px; background: #fff; padding: 8px; }
 .enlace-largo { font-size: 0.8125rem; overflow-wrap: anywhere; color: var(--tinta-3); }
 
 @media (max-width: 599px) {
   .reloj__botones .boton { flex: 1 1 calc(50% - 8px); }
+  .reloj__botones .boton--primario { flex-basis: 100%; }
   .herramientas__titulo { width: 100%; order: -1; }
 }
 .regla .etiqueta { font-weight: 600; font-size: 0.875rem; color: var(--tinta-2); margin-bottom: 4px; }

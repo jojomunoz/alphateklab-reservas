@@ -7,13 +7,13 @@ import { NEGOCIOS_CITAS, textoConsentimiento } from '../nucleo/negocios.mjs';
 import {
   fechaISO, fechaLarga, fechaCorta, horaTexto, horaDeMinutos, minutosDelDia, sumarDias, msDeFecha, MIN,
 } from '../nucleo/tiempo.mjs';
-import { huecosDelDia, horasUnicas, proximoDiaConHueco, motivoCierre, servicioDe, profesionalDe, salaDe, ESTADOS } from '../nucleo/agenda.mjs';
+import { huecosDelDia, horasUnicas, proximoDiaConHueco, motivoCierre, servicioDe, profesionalDe, salaDe, ESTADOS, siguienteMomentoAbierto } from '../nucleo/agenda.mjs';
 import { planificar, VENTANA, CANALES } from '../nucleo/recordatorios.mjs';
 import {
   crearCita, reprogramarCita, cambiarEstado, marcarEnSala, registrarPaciente, revocarConsentimiento, renovarConsentimiento,
   eliminarPaciente, cambiarRegla, validarRegla, pacienteDe, citaDe, canalesDe, transicionesDe, agregarAEspera, componerEnvio,
 } from '../nucleo/operaciones.mjs';
-import { buscarPersonas, mostrarTelefono, enlaceWhatsApp } from '../nucleo/contacto.mjs';
+import { buscarPersonas, mostrarTelefono, enlaceWhatsApp, enlaceSMS, enlaceCorreo } from '../nucleo/contacto.mjs';
 import { asistenciaDe } from '../nucleo/riesgo.mjs';
 import { balboas } from '../nucleo/mensajes.mjs';
 import { exportarCita } from '../nucleo/ical.mjs';
@@ -45,8 +45,9 @@ const cuando = (ms) => `${fechaCorta(ms)}, ${horaTexto(ms)}`;
  * Pinta las horas libres de un día como botones de opción. Si no hay, dice por qué y ofrece el próximo día con espacio.
  * @returns {number[]} los inicios ofrecidos
  */
-export function pintarHoras(cont, { negocio, st, ahora, fecha, servicioId, profesionalId, salaId, excluirCitaId, elegido, nombre = 'hora', alElegirDia }) {
-  const args = { negocio: { ...negocio, ajustes: { ...negocio.ajustes, ...st.ajustes } }, citas: st.citas, fecha, servicioId, profesionalId: profesionalId || null, salaId: salaId || null, ahora, excluirCitaId };
+export function pintarHoras(cont, { negocio, st, ahora, fecha, servicioId, profesionalId, salaId, excluirCitaId, pacienteId = null, elegido, nombre = 'hora', alElegirDia }) {
+  // Con la persona elegida, tampoco se ofrecen las horas en que ya tiene otra cita (con cualquier profesional).
+  const args = { negocio: { ...negocio, ajustes: { ...negocio.ajustes, ...st.ajustes } }, citas: st.citas, fecha, servicioId, profesionalId: profesionalId || null, salaId: salaId || null, ahora, excluirCitaId, pacienteId };
   if (!fecha) { cont.innerHTML = '<p class="sin-horas">Elige una fecha para ver las horas libres.</p>'; return []; }
   if (fecha < fechaISO(ahora)) { cont.innerHTML = '<p class="sin-horas">Esa fecha ya pasó. Elige hoy o un día siguiente.</p>'; return []; }
   const horas = horasUnicas(huecosDelDia(args));
@@ -100,7 +101,7 @@ export function htmlRegla(regla, p = 'r') {
         <div class="campo"><label for="${p}-max">Máximo de mensajes</label><select id="${p}-max" name="maxIntentos">${[2, 3, 4, 5, 6].map((n) => op(n, `${n}`, n === regla.maxIntentos)).join('')}</select></div>
         <div class="campo"><label for="${p}-resp">Último intento por</label><select id="${p}-resp" name="respaldo">${op('', 'El mismo canal', !respaldo)}${op('sms', 'SMS', respaldo === 'sms')}${op('correo', 'Correo', respaldo === 'correo')}</select></div>
       </div>
-      <p class="campo__ayuda">Solo se escribe entre las 8:00 a. m. y las 8:00 p. m., y nunca en la última hora antes de la cita. Si se agotan los mensajes sin respuesta, aparece «Llamar» en la lista de recepción.</p>
+      <p class="campo__ayuda">Solo se escribe entre las 8:00 a. m. y las 8:00 p. m., y nunca en la última hora antes de la cita; los mensajes salen también los días que el negocio cierra. Si se agotan sin respuesta, aparece «Llamar» en la lista de recepción, a una hora en que el negocio está abierto.</p>
     </div>
     <div><p class="etiqueta" id="${p}-plan-t">Así saldrían</p><ol class="plan" data-plan aria-labelledby="${p}-plan-t"></ol></div>
   </fieldset>`;
@@ -126,12 +127,16 @@ export function leerRegla(form) {
   };
 }
 
-/** Vista previa del plan con la regla del formulario: es la misma función que programa los envíos. */
-export function pintarPlan(cont, { inicio, fin, regla, ahora, canales, vocab }) {
+/**
+ * Vista previa del plan con la regla del formulario: es la misma función, con las mismas opciones, que programa los
+ * envíos (lo ya enviado cuenta y la tarea de llamar cae con el negocio abierto).
+ */
+export function pintarPlan(cont, { inicio, fin, regla, ahora, canales, vocab, negocio = null, previos = [] }) {
   if (!inicio) { cont.innerHTML = '<li class="plan__vacio">Elige la hora para ver cuándo saldrían.</li>'; return; }
-  const plan = planificar({ estado: 'pendiente', inicio, fin }, regla, ahora, { canales });
+  const siguienteAbierto = negocio ? (ms) => siguienteMomentoAbierto(negocio, ms) : undefined;
+  const plan = planificar({ estado: 'pendiente', inicio, fin }, regla, ahora, { canales, previos, siguienteAbierto });
   if (!canales.length) { cont.innerHTML = '<li class="plan__vacio">Sin consentimiento para mensajes: no se le escribirá. Toca llamar.</li>'; return; }
-  if (!plan.length) { cont.innerHTML = '<li class="plan__vacio">No queda un momento razonable antes de la cita para escribir (de 8:00 a. m. a 8:00 p. m. y antes de la última hora). Si hace falta, llama.</li>'; return; }
+  if (!plan.length) { cont.innerHTML = `<li class="plan__vacio">${previos.length ? 'Con lo que ya se le envió, esta regla no agrega más mensajes antes de la cita.' : 'No queda un momento razonable antes de la cita para escribir (de 8:00 a. m. a 8:00 p. m. y antes de la última hora). Si hace falta, llama.'}</li>`; return; }
   cont.innerHTML = plan.map((p) => p.tipo === 'llamar'
     ? `<li class="plan__llamar"><time>${esc(cuando(p.momento))}</time> <span>si no respondió: «${esc(vocab.llamar)}»</span></li>`
     : `<li><time>${esc(cuando(p.momento))}</time> <span>${CANALES[p.canal]} · ${p.intento} de ${p.de} · ${esc(p.etiqueta)}</span></li>`).join('');
@@ -196,7 +201,7 @@ export function abrirNuevaCita(ctx, preset = {}) {
     const sin = !canalesDe(paciente).length;
     cont.innerHTML = `<div class="elegido"><div><strong>${esc(paciente.nombre)}</strong><small>${esc(mostrarTelefono(paciente.telefono))} · ${esc(paciente.cedula)}${sin ? ' · sin permiso para mensajes' : ''}</small></div><button type="button" class="boton" data-cambiar-persona>Cambiar</button></div>`;
     busc.hidden = true;
-    cont.querySelector('[data-cambiar-persona]').addEventListener('click', () => { paciente = null; pintarElegido(); actualizarPlan(); el('paciente').focus(); });
+    cont.querySelector('[data-cambiar-persona]').addEventListener('click', () => { paciente = null; pintarElegido(); actualizarHoras(); el('paciente').focus(); });
   };
 
   const pintarSalas = () => {
@@ -214,7 +219,7 @@ export function abrirNuevaCita(ctx, preset = {}) {
     ft.textContent = /^\d{4}-\d{2}-\d{2}$/.test(el('fecha').value) ? fechaLarga(el('fecha').value) : '';
     pintarHoras(form.querySelector('[data-horas]'), {
       negocio, st: s2, ahora: a2, fecha: el('fecha').value, servicioId: el('servicio').value,
-      profesionalId: el('profesional').value, salaId: el('sala').value, elegido, nombre: 'hora',
+      profesionalId: el('profesional').value, salaId: el('sala').value, pacienteId: paciente ? paciente.id : null, elegido, nombre: 'hora',
       alElegirDia: (f) => { el('fecha').value = f; elegido = null; actualizarHoras(); form.querySelector('[name="hora"]')?.focus(); },
     });
     if (!form.querySelector(`[name="hora"][value="${elegido}"]`)) elegido = null;
@@ -224,7 +229,7 @@ export function abrirNuevaCita(ctx, preset = {}) {
   const actualizarPlan = () => {
     const s = servicioDe(negocio, el('servicio').value);
     const canales = paciente ? canalesDe(paciente) : ['whatsapp', 'sms', 'correo'];
-    pintarPlan(form.querySelector('[data-plan]'), { inicio: elegido, fin: elegido ? elegido + s.min * MIN : null, regla: leerRegla(form), ahora: datos(ctx).ahora, canales, vocab: v });
+    pintarPlan(form.querySelector('[data-plan]'), { inicio: elegido, fin: elegido ? elegido + s.min * MIN : null, regla: leerRegla(form), ahora: datos(ctx).ahora, canales, vocab: v, negocio });
   };
 
   // Búsqueda de paciente.
@@ -244,13 +249,13 @@ export function abrirNuevaCita(ctx, preset = {}) {
     res.hidden = true;
     el('paciente').value = '';
     pintarElegido();
-    actualizarPlan();
+    actualizarHoras();
     el('servicio').focus();
   });
   form.querySelector('[data-registrar]').addEventListener('click', () => {
     abrirRegistro(ctx, {
       nombreInicial: /\d/.test(el('paciente').value) ? '' : el('paciente').value,
-      alGuardar: (p) => { paciente = p; pintarElegido(); actualizarPlan(); el('servicio').focus(); },
+      alGuardar: (p) => { paciente = p; pintarElegido(); actualizarHoras(); el('servicio').focus(); },
     });
   });
 
@@ -265,7 +270,7 @@ export function abrirNuevaCita(ctx, preset = {}) {
     ev.preventDefault();
     const errores = [];
     if (!paciente) errores.push({ campo: 'paciente', mensaje: `Elige ${v.persona === 'paciente' ? 'un paciente' : 'un cliente'} o regístralo.` });
-    if (!elegido) errores.push({ mensaje: 'Elige una hora libre.' });
+    if (!elegido) errores.push({ campo: 'hora', mensaje: 'Elige una hora libre.' });
     const regla = leerRegla(form);
     errores.push(...validarRegla(regla).map((e) => ({ ...e, campo: e.campo === 'dias' ? 'dia2' : e.campo })));
     if (errores.length) { mostrarErrores(form, errores); return; }
@@ -274,8 +279,8 @@ export function abrirNuevaCita(ctx, preset = {}) {
       salaId: el('sala').value || null, inicio: elegido, regla,
     }, ahora2));
     if (!r.ok) {
-      mostrarErrores(form, r.errores.map((e) => ({ mensaje: e.mensaje })));
       actualizarHoras();
+      mostrarErrores(form, r.errores.map((e) => ({ mensaje: e.mensaje })));
       return;
     }
     d.close();
@@ -304,11 +309,24 @@ function htmlEnvios(st, negocio, cita, ahora, estado) {
       : e.estado === 'cancelado' ? `<span class="insignia">Detenido: ${esc(e.motivoCancelacion)}</span>`
         : e.estado === 'tarea' ? '<span class="insignia insignia--aviso">Tarea</span>' : '<span class="insignia insignia--primario">En cola</span>';
     let acciones = '';
-    if (e.tipo === 'mensaje' && e.estado === 'enviado' && p && p.telefono) {
-      acciones = `<div class="acciones"><a class="boton" href="${esc(enlaceWhatsApp(p.telefono, e.texto))}" target="_blank" rel="noopener">${icono('whatsapp')} Abrir en WhatsApp</a><a class="boton" href="${esc(e.enlace)}" target="_blank" rel="noopener">Ver como paciente</a></div>`;
+    if (e.tipo === 'mensaje' && e.estado === 'enviado' && e.borrado) acciones = '<p class="campo__ayuda">Texto borrado junto con los datos de la persona.</p>';
+    else if (e.tipo === 'mensaje' && e.estado === 'enviado' && p) {
+      const abrir = botonAbrirEnvio(e, p);
+      acciones = `<div class="acciones">${abrir}<a class="boton" href="${esc(e.enlace)}" target="_blank" rel="noopener">Ver como ${esc(negocio.vocab.persona)}</a></div>`;
     }
     return `<li><span class="${e.estado === 'cancelado' ? 'tachado' : ''}"><time>${esc(cuando(e.momento))}</time> · ${quePasa}</span>${est}${acciones}</li>`;
   }).join('')}</ul>`;
+}
+
+/**
+ * El botón para mandar a mano un mensaje, según su canal: WhatsApp (wa.me), SMS (sms:) o correo (mailto:).
+ * Sin el dato de contacto de ese canal, no hay botón.
+ */
+export function botonAbrirEnvio(e, p, { clase = 'boton', texto = null } = {}) {
+  if (e.canal === 'sms' && p.telefono) return `<a class="${clase}" href="${esc(enlaceSMS(p.telefono, texto ?? e.texto))}">${icono('sms')} Abrir en SMS</a>`;
+  if (e.canal === 'correo' && p.correo) return `<a class="${clase}" href="${esc(enlaceCorreo(p.correo, 'Tu cita', texto ?? e.texto))}">${icono('correo')} Abrir en el correo</a>`;
+  if (p.telefono && e.canal !== 'correo') return `<a class="${clase}" href="${esc(enlaceWhatsApp(p.telefono, texto ?? e.texto))}" target="_blank" rel="noopener">${icono('whatsapp')} Abrir en WhatsApp</a>`;
+  return '';
 }
 
 export function abrirCita(ctx, citaId) {
@@ -350,7 +368,7 @@ export function abrirCita(ctx, citaId) {
       </div>
       <div class="bloque-dialogo">
         <h3>Recordatorios</h3>
-        <p class="campo__ayuda" style="margin-bottom:6px">${esc(resumenRegla(cita.regla))}</p>
+        <p class="campo__ayuda" style="margin-bottom:6px">${esc(resumenRegla(cita.regla, cita))}</p>
         ${htmlEnvios(st, negocio, cita, ahora, estado)}
         ${puedeRegla ? '<p style="margin-top:8px"><button type="button" class="boton" data-accion="regla">Cambiar el recordatorio</button></p>' : ''}
         <div data-editar-regla></div>
@@ -385,7 +403,8 @@ export function abrirCita(ctx, citaId) {
     if (accion === 'cancelada') {
       const ok = await confirmar({
         titulo: 'Cancelar la cita',
-        texto: `Se cancela la cita de ${esc(p ? p.nombre : '')} del ${esc(fechaLarga(cita.inicio))} a las ${esc(horaTexto(cita.inicio))}. Se detienen sus recordatorios y el horario se ofrece a la lista de espera.`,
+        // horaTexto termina en «m.»: la frase no lleva otro punto.
+        texto: `Se cancela la cita de ${esc(p ? p.nombre : '')} del ${esc(fechaLarga(cita.inicio))} a las ${esc(horaTexto(cita.inicio))} Se detienen sus recordatorios y el horario se ofrece a la lista de espera.`,
         si: 'Cancelar la cita', no: 'No cancelar', peligro: true,
       });
       if (!ok) return;
@@ -400,8 +419,13 @@ export function abrirCita(ctx, citaId) {
   return dlg;
 }
 
-export function resumenRegla(regla) {
+/** La regla en una frase. Para una cita confirmada, lo que de verdad aplica: un aviso, sin insistir. */
+export function resumenRegla(regla, cita = null) {
   if (!regla) return 'Sin regla.';
+  if (cita && cita.estado === 'confirmada') {
+    const cercano = Math.min(...regla.dias);
+    return `Confirmada: se le recuerda ${cercano === 0 ? 'el mismo día' : cercano === 1 ? '1 día antes' : `${cercano} días antes`}, a las ${horaDeMinutos(regla.hora)}, por ${CANALES[regla.canal]}, sin insistir.`;
+  }
   const dias = regla.dias.length === 2 ? '2 días y 1 día antes' : regla.dias[0] === 2 ? '2 días antes' : '1 día antes';
   let t = `${dias}, a las ${horaDeMinutos(regla.hora)}, por ${CANALES[regla.canal]}.`;
   if (regla.insistir) t += ` Insiste cada ${regla.cadaHoras} h, hasta ${regla.maxIntentos} mensajes${regla.respaldo ? ` (el último por ${CANALES[regla.respaldo]})` : ''}; luego, llamar.`;
@@ -417,15 +441,19 @@ function editarRegla(ctx, citaId, cont) {
     <div class="acciones"><button type="submit" class="boton boton--primario">Guardar el recordatorio</button><button type="button" class="boton" data-cancelar-regla>Dejarlo como estaba</button></div>
   </form>`;
   const form = cont.querySelector('form');
+  if (st.envios.some((e) => e.citaId === citaId && e.tipo === 'mensaje' && e.estado === 'enviado')) {
+    form.querySelector('[data-plan]').insertAdjacentHTML('beforebegin', '<p class="campo__ayuda">Lo que ya se le envió cuenta para el máximo: no se vuelve a empezar.</p>');
+  }
   const paciente = pacienteDe(st, cita.pacienteId);
-  const actualizar = () => pintarPlan(form.querySelector('[data-plan]'), { inicio: cita.inicio, fin: cita.fin, regla: leerRegla(form), ahora: datos(ctx).ahora, canales: canalesDe(paciente), vocab: negocio.vocab });
+  const previos = st.envios.filter((e) => e.citaId === citaId && e.tipo === 'mensaje' && e.estado === 'enviado').map((e) => e.salioEn ?? e.momento);
+  const actualizar = () => pintarPlan(form.querySelector('[data-plan]'), { inicio: cita.inicio, fin: cita.fin, regla: leerRegla(form), ahora: datos(ctx).ahora, canales: canalesDe(paciente), vocab: negocio.vocab, negocio, previos });
   enlazarRegla(form, actualizar);
   actualizar();
   form.querySelector('[data-cancelar-regla]').addEventListener('click', () => { cont.innerHTML = ''; });
   form.addEventListener('submit', (ev) => {
     ev.preventDefault();
     const regla = leerRegla(form);
-    const r = operar(ctx, (s, n, ahora) => cambiarRegla(s, citaId, regla, ahora));
+    const r = operar(ctx, (s, n, ahora) => cambiarRegla(s, citaId, regla, ahora, n));
     if (!r.ok) { mostrarErrores(form, r.errores.map((e) => ({ ...e, campo: e.campo === 'dias' ? 'dia2' : e.campo }))); return; }
     anunciar('Recordatorio actualizado: lo que faltaba se volvió a planificar.');
   });
@@ -468,7 +496,7 @@ export function abrirReprogramar(ctx, citaId) {
     const x = datos(ctx);
     pintarHoras(form.querySelector('[data-horas]'), {
       negocio, st: x.st, ahora: x.ahora, fecha: form.elements.fecha.value, servicioId: cita.servicioId,
-      profesionalId: form.elements.profesional.value, excluirCitaId: cita.id, elegido, nombre: 'hora-rp',
+      profesionalId: form.elements.profesional.value, excluirCitaId: cita.id, pacienteId: cita.pacienteId, elegido, nombre: 'hora-rp',
       alElegirDia: (f) => { form.elements.fecha.value = f; elegido = null; pintar(); },
     });
   };
@@ -477,10 +505,11 @@ export function abrirReprogramar(ctx, citaId) {
   form.querySelector('[data-horas]').addEventListener('change', (ev) => { if (ev.target.name === 'hora-rp') elegido = +ev.target.value; });
   form.addEventListener('submit', (ev) => {
     ev.preventDefault();
-    if (!elegido) { mostrarErrores(form, [{ mensaje: 'Elige la hora nueva.' }]); return; }
+    if (!elegido) { mostrarErrores(form, [{ campo: 'hora-rp', mensaje: 'Elige la hora nueva.' }]); return; }
     const r = operar(ctx, (s, neg, a) => reprogramarCita(s, neg, citaId, { inicio: elegido, profesionalId: form.elements.profesional.value }, a));
     if (!r.ok) { mostrarErrores(form, r.errores.map((e) => ({ mensaje: e.mensaje }))); pintar(); return; }
     d.close();
+    // horaTexto termina en «m.»: ese punto cierra la frase (no se escribe otro).
     anunciar(`Cita movida al ${fechaLarga(r.cita.inicio)}, ${horaTexto(r.cita.inicio)} Los recordatorios se replanificaron.`);
   });
   pintar();
@@ -570,7 +599,7 @@ export function abrirPaciente(ctx, pacienteId) {
         <h3>Citas (${citas.length})</h3>
         ${citas.length ? `<ul class="filas">${citas.map((c) => `<li style="padding:8px 0;display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap"><button type="button" class="persona__nombre" data-cita="${c.id}">${esc(cuando(c.inicio))} · ${esc(servicioDe(negocio, c.servicioId).nombre)}</button>${insigniaEstado(c.estado)}</li>`).join('')}</ul>` : '<p class="vacio">Todavía no tiene citas.</p>'}
       </div>
-      ${p.eliminado ? '' : `<div class="bloque-dialogo"><h3>Sus datos</h3><p class="campo__ayuda" style="margin-bottom:8px">Si pide que se borren (derecho de cancelación), se quitan nombre, cédula, teléfono y correo; las citas pasadas quedan anónimas para la estadística.</p><button type="button" class="boton boton--peligro" data-accion="borrar">Borrar sus datos</button><div class="resumen-errores" data-errores tabindex="-1" hidden style="margin-top:10px"></div></div>`}`;
+      ${p.eliminado ? '' : `<div class="bloque-dialogo"><h3>Sus datos</h3><p class="campo__ayuda" style="margin-bottom:8px">Si pide que se borren (derecho de cancelación), se quitan nombre, cédula, teléfono y correo, también de la bitácora y de los mensajes enviados; las citas pasadas quedan anónimas para la estadística.</p><button type="button" class="boton boton--peligro" data-accion="borrar">Borrar sus datos</button><div class="resumen-errores" data-errores tabindex="-1" hidden style="margin-top:10px"></div></div>`}`;
     if (!dlg) {
       dlg = abrirDialogo({ titulo: esc(p.nombre), cuerpo, alCerrar: () => quitar() });
       dlg.addEventListener('click', alClic);
@@ -596,7 +625,7 @@ export function abrirPaciente(ctx, pacienteId) {
     }
     if (accion === 'renovar') { operar(ctx, (s, n, a) => renovarConsentimiento(s, negocio, pacienteId, 'en persona', a)); return; }
     if (accion === 'borrar') {
-      const ok = await confirmar({ titulo: 'Borrar sus datos', texto: `Se borran el nombre, la cédula, el teléfono y el correo de ${esc(p.nombre)}. No se puede deshacer.`, si: 'Borrar sus datos', no: 'No borrar', peligro: true });
+      const ok = await confirmar({ titulo: 'Borrar sus datos', texto: `Se borran el nombre, la cédula, el teléfono y el correo de ${esc(p.nombre)}, también de la bitácora y del texto de los mensajes ya enviados. Sus citas pasadas quedan sin nombre para la estadística. No se puede deshacer.`, si: 'Borrar sus datos', no: 'No borrar', peligro: true });
       if (!ok) return;
       const r = operar(ctx, (s, n, a) => eliminarPaciente(s, pacienteId, a));
       if (!r.ok) { const z = dlg.querySelector('[data-errores]'); z.hidden = false; z.innerHTML = `<p>${esc(r.errores[0].mensaje)}</p>`; z.focus(); }

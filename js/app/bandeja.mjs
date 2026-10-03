@@ -2,11 +2,10 @@
 // qué, y las plantillas. El reloj no corre solo: se adelanta con botones para ver en minutos lo que en la vida real
 // pasa en dos días.
 
-import { esc, icono, anunciar, abrirDialogo, copiar, $, reduceMovimiento } from './ui.mjs';
+import { esc, icono, anunciar, abrirDialogo, copiar, $, reduceMovimiento, claveDeFoco, devolverFoco } from './ui.mjs';
 import { cargar, alCambiar, transaccion, adelantarReloj, opcionesEnlace } from './almacen.mjs';
 import { iniciarBarra, pintarMarca, plantillaCitas } from './demo.mjs';
-import { escuchar, pintarPieRelevo, AVISO_RELEVO } from './relevo.mjs';
-import { aplicarMensaje } from '../nucleo/mensajes-relevo.mjs';
+import { escucharEnRecepcion, pintarPieRelevo, AVISO_RELEVO } from './relevo.mjs';
 import { NEGOCIOS_CITAS } from '../nucleo/negocios.mjs';
 import { fechaISO, fechaLarga, fechaCorta, horaTexto, inicioDelDia, sumarDias, msDeFecha, HORA, DIA, MIN, DIAS_CORTOS, diaSemana, leerISO } from '../nucleo/tiempo.mjs';
 import { proximoEnvio, CANALES, VENTANA } from '../nucleo/recordatorios.mjs';
@@ -14,7 +13,7 @@ import { pacienteDe, citaDe } from '../nucleo/operaciones.mjs';
 import { profesionalDe } from '../nucleo/agenda.mjs';
 import { mostrarTelefono, enlaceWhatsApp } from '../nucleo/contacto.mjs';
 import { PLANTILLAS_POR_DEFECTO, VARIABLES, revisarPlantilla, rellenar, segmentosSMS } from '../nucleo/mensajes.mjs';
-import { datos, abrirCita, previsualizarEnvio, cuando } from './componentes-citas.mjs';
+import { datos, abrirCita, previsualizarEnvio, cuando, botonAbrirEnvio } from './componentes-citas.mjs';
 
 let plantilla = plantillaCitas();
 const ctx = { plantilla: () => plantilla, alCambiar: (fn) => alCambiar(fn) };
@@ -25,6 +24,11 @@ let bitacoraVista = 0;
 const angosto = matchMedia('(max-width: 599px)');
 const rielHoras = () => (angosto.matches ? 48 : 72);
 angosto.addEventListener?.('change', () => pintarReloj($('#reloj')));
+// Hasta 1000 px las listas no tienen scroll propio (en el teléfono atrapaban el dedo): se muestran por tandas.
+const listasLargas = matchMedia('(min-width: 1000px)');
+const TANDA = 8;
+const mostrar = { cola: TANDA, salio: TANDA };
+listasLargas.addEventListener?.('change', () => pintarListas($('#listas')));
 
 // ── Encabezado ────────────────────────────────────────────────────────
 
@@ -66,7 +70,9 @@ function htmlRiel(st, ahora) {
   for (const g of [...grupos.values()].sort((a, b) => a.momento - b.momento)) {
     html += `<span class="riel__marca riel__marca--${g.clase}${g.sms ? ' riel__marca--sms' : ''}" style="left:${x(g.momento)}%;top:${carril[g.clase]}px">${g.n > 1 ? g.n : ''}</span>`;
   }
-  html += `<div class="riel__ahora" style="left:${x(ahora)}%"><span>ahora</span></div>`;
+  // La aguja ocupa todo el ancho y se mueve con transform (no con «left»): su borde izquierdo marca la hora.
+  const xa = x(ahora);
+  html += `<div class="riel__ahora${xa > 88 ? ' riel__ahora--fin' : ''}" style="transform:translateX(${xa}%)"><span>ahora</span></div>`;
   return html;
 }
 
@@ -80,8 +86,9 @@ function pintarReloj(cont) {
   const detenidos = enRango.filter((e) => e.estado === 'cancelado').length;
   const anterior = cont.querySelector('.riel__ahora');
   const mismoRango = cont.dataset.desde === String(desde);
-  const izquierdaAnterior = anterior && mismoRango ? anterior.style.left : null;
+  const posicionAnterior = anterior && mismoRango ? anterior.style.transform : null;
   cont.dataset.desde = String(desde);
+  const fin = fechaLarga(hasta - 1);
   cont.innerHTML = `
     <div class="reloj__arriba">
       <div>
@@ -93,30 +100,30 @@ function pintarReloj(cont) {
         <button type="button" class="boton" data-avanzar="${HORA}">+1 hora</button>
         <button type="button" class="boton" data-avanzar="${6 * HORA}">+6 horas</button>
         <button type="button" class="boton" data-avanzar="${DIA}">+1 día</button>
-        <button type="button" class="boton boton--primario" data-proximo="${prox || ''}"${prox ? '' : ' disabled'}>${prox ? `Hasta el próximo envío (${esc(cuando(prox))})` : 'No hay nada en cola'}</button>
+        <button type="button" class="boton boton--primario" data-proximo="${prox || ''}"${prox ? '' : ' disabled'}>${prox ? `<span>Hasta el próximo envío <span class="sin-corte">(${esc(cuando(prox))})</span></span>` : 'No hay nada en cola'}</button>
       </div>
     </div>
     <div>
+      <p class="riel__alcance">En el riel, del ${esc(fechaLarga(desde))} al ${esc(fin)} (${rielHoras()} h): <strong>${cola}</strong> en cola, <strong>${salidos}</strong> ${salidos === 1 ? 'enviado' : 'enviados'} y <strong>${detenidos}</strong> ${detenidos === 1 ? 'detenido' : 'detenidos'}. Las listas de abajo cuentan todas las fechas.</p>
       <div class="riel" aria-hidden="true">${htmlRiel(st, ahora)}</div>
-      <p class="sr-only">Entre el ${esc(fechaLarga(desde))} y el ${esc(fechaLarga(hasta - 1))}: ${cola} en cola, ${salidos} enviados y ${detenidos} detenidos.</p>
-      <div class="riel__leyenda">
+      <div class="riel__leyenda" aria-hidden="true">
         <span><span class="riel__muestra riel__muestra--ventana"></span>Ventana de envío (8:00 a. m. a 8:00 p. m.)</span>
-        <span><span class="riel__muestra"></span>En cola (${cola})</span>
-        <span><span class="riel__muestra riel__muestra--enviado"></span>Enviado (${salidos})</span>
-        <span><span class="riel__muestra riel__muestra--cancelado"></span>Detenido (${detenidos})</span>
+        <span><span class="riel__muestra"></span>En cola</span>
+        <span><span class="riel__muestra riel__muestra--enviado"></span>Enviado</span>
+        <span><span class="riel__muestra riel__muestra--cancelado"></span>Detenido</span>
         <span><span class="riel__muestra riel__muestra--llamar"></span>Tarea de llamar</span>
       </div>
     </div>
-    <p class="reloj__nota">El reloj no corre solo: adelántalo y mira cómo salen los recordatorios y los reintentos, y cómo se detienen cuando ${esc(negocio.vocab.persona === 'paciente' ? 'el paciente' : 'el cliente')} confirma o cancela. Afuera de la demo no hay envío automático sin servidor: cada mensaje se manda a mano con «Abrir en WhatsApp».</p>`;
+    <p class="reloj__nota">El reloj no corre solo: adelántalo y mira cómo salen los recordatorios y los reintentos, y cómo se detienen cuando ${esc(negocio.vocab.persona === 'paciente' ? 'el paciente' : 'el cliente')} confirma o cancela. En esta demo nada sale solo: cada mensaje se manda a mano con su botón («Abrir en WhatsApp», en SMS o en el correo). Con un servidor, salen solos a su hora.</p>`;
   // Que la aguja viaje desde donde estaba (si no cambió de día y no se pidió reducir movimiento).
   const aguja = cont.querySelector('.riel__ahora');
-  if (izquierdaAnterior && !reduceMovimiento() && izquierdaAnterior !== aguja.style.left) {
-    const destino = aguja.style.left;
+  if (posicionAnterior && !reduceMovimiento() && posicionAnterior !== aguja.style.transform) {
+    const destino = aguja.style.transform;
     aguja.style.transition = 'none';
-    aguja.style.left = izquierdaAnterior;
+    aguja.style.transform = posicionAnterior;
     aguja.getBoundingClientRect();
     aguja.style.transition = '';
-    aguja.style.left = destino;
+    aguja.style.transform = destino;
   }
 }
 
@@ -125,6 +132,7 @@ function pintarReloj(cont) {
 function etiquetaClase(e) {
   if (e.tipo === 'llamar') return 'Llamar si no respondió';
   if (e.clase === 'oferta') return 'Aviso de la lista de espera';
+  if (e.clase === 'aviso') return `Aviso de cita confirmada · ${e.etiqueta}`;
   if (e.clase === 'reintento') return `Reintento · ${e.intento} de ${e.de}`;
   return `Recordatorio ${e.etiqueta} · ${e.intento} de ${e.de}`;
 }
@@ -144,13 +152,15 @@ function htmlEnvio(e, st, negocio, { conTexto = false } = {}) {
   const sobre = cita ? `Cita: ${cuando(cita.inicio)}` : oferta ? `Espacio: ${cuando(oferta.hueco.inicio)}` : '';
   const canal = e.tipo === 'llamar' ? `${icono('llamar')} Recepción` : `${icono(e.canal)} ${CANALES[e.canal]}`;
   let acciones = `<button type="button" class="boton" data-ver-envio="${e.id}">Ver mensaje</button>`;
-  if (e.estado === 'enviado' && p && p.telefono) {
-    acciones = `<a class="boton" href="${esc(enlaceWhatsApp(p.telefono, e.texto))}" target="_blank" rel="noopener">${icono('whatsapp')} Abrir en WhatsApp</a>
+  if (e.borrado) acciones = '';
+  else if (e.estado === 'enviado' && p) {
+    acciones = `${botonAbrirEnvio(e, p)}
       <a class="boton" href="${esc(e.enlace)}" target="_blank" rel="noopener">Ver como ${esc(negocio.vocab.persona)}</a>
       <button type="button" class="boton" data-ver-envio="${e.id}">Más</button>`;
   }
   if (e.tipo === 'llamar') acciones = cita ? `<button type="button" class="boton" data-ver-cita="${cita.id}">Ver la cita</button>` : '';
-  const motivo = e.estado === 'cancelado' ? `<span class="insignia">Se detuvo: ${esc(e.motivoCancelacion)}</span>` : '';
+  const motivo = e.estado === 'cancelado' ? `<span class="insignia">Se detuvo: ${esc(e.motivoCancelacion)}</span>`
+    : e.borrado ? '<span class="insignia">Texto borrado junto con los datos de la persona</span>' : '';
   return `<li class="envio${recien.has(e.id) ? ' envio--nuevo' : ''}">
     <div class="envio__cabeza"><span class="envio__quien">${esc(p ? p.nombre : '—')}</span><span class="envio__cuando">${esc(cuando(e.estado === 'enviado' ? e.salioEn : e.momento))}</span></div>
     <p class="envio__meta"><span>${canal}</span><span>${esc(etiquetaClase(e))}</span>${sobre ? `<span>${esc(sobre)}</span>` : ''}${e.atrasado ? '<span>salió al agendar</span>' : ''}</p>
@@ -170,6 +180,17 @@ function porDia(lista, campo, st, negocio, opciones) {
   return html;
 }
 
+/** Lista con scroll propio en pantallas anchas; en el teléfono, por tandas con «Ver los N siguientes». */
+function htmlLista(lista, clave, etiqueta, campo, st, negocio, opciones) {
+  const MAX = 60;
+  if (listasLargas.matches) {
+    return `<ul class="filas lista-scroll" tabindex="0" aria-label="${etiqueta}">${porDia(lista.slice(0, MAX), campo, st, negocio, opciones)}</ul>${lista.length > MAX ? `<p class="vacio">Y ${lista.length - MAX} más después.</p>` : ''}`;
+  }
+  const n = Math.min(mostrar[clave], lista.length);
+  const quedan = lista.length - n;
+  return `<ul class="filas" aria-label="${etiqueta}">${porDia(lista.slice(0, n), campo, st, negocio, opciones)}</ul>${quedan ? `<p class="mas-lista"><button type="button" class="boton" data-ver-mas="${clave}">Ver ${Math.min(quedan, 20) === quedan ? `los ${quedan} que faltan` : 'los 20 siguientes'} (de ${lista.length})</button></p>` : ''}`;
+}
+
 function pintarListas(cont) {
   const { negocio, st, ahora } = datos(ctx);
   const cola = st.envios.filter((e) => e.estado === 'programado').sort((a, b) => a.momento - b.momento);
@@ -182,15 +203,15 @@ function pintarListas(cont) {
   cont.innerHTML = `
     <section class="panel" aria-labelledby="b-cola">
       <div class="panel__cabeza"><h2 id="b-cola">En cola <span class="cuenta">${cola.length}</span></h2></div>
-      ${cola.length ? `<ul class="filas lista-scroll" tabindex="0" aria-label="Mensajes en cola">${porDia(cola.slice(0, MAX), 'momento', st, negocio)}</ul>${cola.length > MAX ? `<p class="vacio">Y ${cola.length - MAX} más después.</p>` : ''}` : '<p class="vacio"><strong>La cola está vacía.</strong>Agenda una cita con recordatorio y aparece aquí.</p>'}
+      ${cola.length ? htmlLista(cola, 'cola', 'Mensajes en cola', 'momento', st, negocio) : '<p class="vacio"><strong>La cola está vacía.</strong>Agenda una cita con recordatorio y aparece aquí.</p>'}
     </section>
     <section class="panel" aria-labelledby="b-env">
       <div class="panel__cabeza"><h2 id="b-env">Ya salió <span class="cuenta">${enviados.length}</span></h2></div>
-      ${enviados.length ? `<ul class="filas lista-scroll" tabindex="0" aria-label="Mensajes enviados">${porDia(enviados.slice(0, MAX), 'salioEn', st, negocio, { conTexto: true })}</ul>` : '<p class="vacio"><strong>Todavía no ha salido nada.</strong>Adelanta el reloj.</p>'}
+      ${enviados.length ? htmlLista(enviados, 'salio', 'Mensajes enviados', 'salioEn', st, negocio, { conTexto: true }) : '<p class="vacio"><strong>Todavía no ha salido nada.</strong>Adelanta el reloj.</p>'}
     </section>
     <section class="panel" aria-labelledby="b-bit">
       <div class="panel__cabeza"><h2 id="b-bit">Lo que pasó</h2></div>
-      <ol class="bitacora lista-scroll" tabindex="0" aria-label="Bitácora">${bit.map((b, i) => `<li class="${i < nuevosBit && recien.size ? 'nuevo' : ''}"><time>${esc(fechaCorta(b.t).split(' ').slice(0, 2).join(' '))}<br>${esc(horaTexto(b.t))}</time><span>${esc(b.texto)}</span></li>`).join('')}</ol>
+      <ol class="bitacora${listasLargas.matches ? ' lista-scroll' : ''}"${listasLargas.matches ? ' tabindex="0"' : ''} aria-label="Bitácora">${bit.map((b, i) => `<li class="${i < nuevosBit && recien.size ? 'nuevo' : ''}"><time>${esc(fechaCorta(b.t).split(' ').slice(0, 2).join(' '))}<br>${esc(horaTexto(b.t))}</time><span>${esc(b.texto)}</span></li>`).join('')}</ol>
     </section>
     <section class="panel" aria-labelledby="b-det">
       <div class="panel__cabeza"><h2 id="b-det">Detenidos <span class="cuenta">${detenidos.length}</span></h2></div>
@@ -206,7 +227,7 @@ function pintarListas(cont) {
 
 // ── Plantillas ────────────────────────────────────────────────────────
 
-const NOMBRES_PLANTILLA = { recordatorio: 'Recordatorio', reintento: 'Reintento (si no respondió)', oferta: 'Aviso a la lista de espera' };
+const NOMBRES_PLANTILLA = { recordatorio: 'Recordatorio', reintento: 'Reintento (si no respondió)', aviso: 'Aviso de cita ya confirmada', oferta: 'Aviso a la lista de espera' };
 
 function pintarPlantillas(cont) {
   const { negocio, st } = datos(ctx);
@@ -221,10 +242,10 @@ function pintarPlantillas(cont) {
       ${Object.keys(NOMBRES_PLANTILLA).map((k) => `
         <div class="campo">
           <label for="pl-${k}">${NOMBRES_PLANTILLA[k]}</label>
-          <textarea id="pl-${k}" name="${k}" rows="3" maxlength="700">${esc(st.plantillas[k])}</textarea>
+          <textarea id="pl-${k}" name="${k}" rows="3" maxlength="700">${esc(st.plantillas[k] ?? PLANTILLAS_POR_DEFECTO[k])}</textarea>
           <div class="variables" role="group" aria-label="Insertar variable en ${NOMBRES_PLANTILLA[k].toLowerCase()}">${VARIABLES.map((v) => `<button type="button" data-insertar="${v}" data-en="${k}">{${v}}</button>`).join('')}</div>
           <p class="etiqueta" style="font-size:0.8125rem;color:var(--tinta-3);margin-top:4px">Así se lee (con datos de ejemplo):</p>
-          <p class="vista-previa" data-previa="${k}">${esc(rellenar(st.plantillas[k], ejemplo))}</p>
+          <p class="vista-previa" data-previa="${k}">${esc(rellenar(st.plantillas[k] ?? PLANTILLAS_POR_DEFECTO[k], ejemplo))}</p>
         </div>`).join('')}
       <div class="acciones"><button type="submit" class="boton boton--primario">Guardar plantillas</button><button type="button" class="boton" data-plantillas-original>Volver al texto original</button></div>
     </form>`;
@@ -303,7 +324,7 @@ function abrirEnvio(id) {
       <p class="envio__texto" style="margin-top:12px">${esc(texto)}</p>
       ${e.estado !== 'enviado' ? '<p class="campo__ayuda" style="margin-top:6px">Así saldría si saliera ahora; el texto final se arma al salir.</p>' : ''}
       <div class="acciones" style="margin-top:14px">
-        ${p && p.telefono ? `<a class="boton boton--primario" href="${esc(enlaceWhatsApp(p.telefono, texto))}" target="_blank" rel="noopener">${icono('whatsapp')} Abrir en WhatsApp</a>` : ''}
+        ${p ? botonAbrirEnvio(e, p, { clase: 'boton boton--primario', texto }) : ''}
         <a class="boton" href="${esc(enlace)}" target="_blank" rel="noopener">Ver como ${esc(negocio.vocab.persona)}</a>
         <button type="button" class="boton" data-copiar>${icono('enlace')} Copiar enlace</button>
       </div>
@@ -332,10 +353,17 @@ function pintar() {
 }
 
 function avanzar(hasta) {
+  const previo = document.activeElement;
+  // El botón se vuelve a pintar: se recuerda cuál era para devolverle el foco (si quedó deshabilitado, al primero).
+  const clave = previo && previo.matches?.('[data-proximo]') ? '[data-proximo]' : claveDeFoco(previo);
   const antes = new Set(datos(ctx).st.envios.filter((e) => e.estado === 'enviado' || e.estado === 'tarea').map((e) => e.id));
   const salieron = adelantarReloj(hasta)?.[plantilla] || [];
   recien = new Set(salieron.map((e) => e.id).filter((x) => !antes.has(x)));
   pintar();
+  if (previo && previo.closest?.('.reloj__botones')) {
+    const otro = clave ? document.querySelector(clave) : null;
+    devolverFoco(null, otro && !otro.disabled ? clave : '[data-avanzar]');
+  }
   const msj = salieron.filter((e) => e.tipo === 'mensaje').length, llamar = salieron.filter((e) => e.tipo === 'llamar').length;
   const { ahora } = datos(ctx);
   anunciar(msj || llamar
@@ -352,6 +380,17 @@ document.addEventListener('click', (ev) => {
   if (b('[data-avanzar]')) { avanzar(ahora + +b('[data-avanzar]').dataset.avanzar); return; }
   if (b('[data-proximo]')) { const v = +b('[data-proximo]').dataset.proximo; if (v) avanzar(v); return; }
   if (b('[data-ver-envio]')) { abrirEnvio(b('[data-ver-envio]').dataset.verEnvio); return; }
+  if (b('[data-ver-mas]')) {
+    const k = b('[data-ver-mas]').dataset.verMas;
+    const lista = $('#' + (k === 'cola' ? 'b-cola' : 'b-env')).closest('section');
+    const antes = lista.querySelectorAll('.envio').length;
+    mostrar[k] += 20;
+    pintarListas($('#listas'));
+    // El foco va al primero de los que aparecieron.
+    const nuevo = $('#' + (k === 'cola' ? 'b-cola' : 'b-env')).closest('section').querySelectorAll('.envio')[antes];
+    if (nuevo) { nuevo.setAttribute('tabindex', '-1'); nuevo.focus(); }
+    return;
+  }
   if (b('[data-ver-cita]')) { abrirCita(ctx, b('[data-ver-cita]').dataset.verCita); }
 });
 
@@ -364,8 +403,4 @@ alCambiar((e, info) => {
   pintar();
 });
 pintarPieRelevo($('#pie'), 'conectando');
-escuchar(estado.sala, (mensaje) => {
-  let r;
-  transaccion((e) => { r = aplicarMensaje(e, mensaje); return r.resultado === 'repetida' || r.resultado === 'forma' ? { ok: false } : { ok: true }; }, 'relevo');
-  if (r && r.aviso && r.resultado !== 'repetida') anunciar(r.aviso);
-}, (est) => pintarPieRelevo($('#pie'), est));
+escucharEnRecepcion(estado.sala, { transaccion, anunciar, alEstado: (est) => pintarPieRelevo($('#pie'), est) });

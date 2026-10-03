@@ -38,7 +38,10 @@ export function icono(nombre, clase = '') {
   return `<svg class="ico ico-${nombre} ${clase}" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">${t}</svg>`;
 }
 
-/** Región viva para anunciar cambios («Salieron 3 mensajes») a lectores de pantalla y mostrarlos un momento. */
+/**
+ * Región viva para anunciar cambios («Salieron 3 mensajes») a lectores de pantalla y mostrarlos un momento.
+ * Un aviso nuevo reemplaza al anterior: apilados tapaban la pantalla del teléfono.
+ */
 export function anunciar(texto, { tipo = 'info', duracion = 5000 } = {}) {
   let zona = document.getElementById('avisos');
   if (!zona) {
@@ -52,11 +55,32 @@ export function anunciar(texto, { tipo = 'info', duracion = 5000 } = {}) {
   const el = document.createElement('p');
   el.className = `aviso-flotante aviso-${tipo}`;
   el.textContent = texto;
-  zona.append(el);
+  zona.replaceChildren(el);
   setTimeout(() => {
     el.classList.add('saliendo');
     setTimeout(() => el.remove(), 260);
   }, duracion);
+}
+
+/**
+ * Cómo volver a encontrar un elemento si la vista se vuelve a pintar (el botón original deja de existir):
+ * por su id o por su primer atributo data-*.
+ */
+export function claveDeFoco(el) {
+  if (!el || el === document.body || !el.tagName) return null;
+  if (el.id) return `#${CSS.escape(el.id)}`;
+  for (const a of el.attributes) {
+    if (a.name.startsWith('data-')) return `${el.tagName.toLowerCase()}[${a.name}="${CSS.escape(a.value)}"]`;
+  }
+  return null;
+}
+
+/** Devuelve el foco a `previo` o, si ya no existe, a su equivalente en la vista nueva; si no hay, al contenido. */
+export function devolverFoco(previo, clave) {
+  if (previo && previo.isConnected && !previo.disabled) { previo.focus(); return; }
+  const otro = clave ? document.querySelector(clave) : null;
+  if (otro && !otro.disabled) { otro.focus(); return; }
+  document.getElementById('principal')?.focus({ preventScroll: true });
 }
 
 /** Abre un <dialog> modal con el HTML dado. Devuelve el elemento; se elimina al cerrarse. */
@@ -73,6 +97,7 @@ export function abrirDialogo({ titulo, cuerpo, clase = '', alAbrir, alCerrar, et
     <div class="dialogo__cuerpo">${cuerpo}</div>`;
   document.body.append(d);
   const previo = document.activeElement;
+  const clavePrevio = claveDeFoco(previo);
   d.addEventListener('click', (ev) => {
     if (ev.target.closest('[data-cerrar]')) d.close();
     else if (ev.target === d) d.close(); // clic en el fondo
@@ -80,7 +105,8 @@ export function abrirDialogo({ titulo, cuerpo, clase = '', alAbrir, alCerrar, et
   d.addEventListener('close', () => {
     alCerrar && alCerrar(d);
     d.remove();
-    if (previo && previo.isConnected) previo.focus();
+    // Si al guardar se volvió a pintar la vista, el botón de origen ya no existe: se busca su equivalente.
+    devolverFoco(previo, clavePrevio);
   });
   d.showModal();
   alAbrir && alAbrir(d);
@@ -126,23 +152,28 @@ export async function copiar(texto) {
   }
 }
 
-/** Muestra errores de un formulario junto a cada campo (aria-describedby) y un resumen arriba. */
-export function mostrarErrores(form, errores, resumenSel = '[data-errores]') {
+/**
+ * Muestra errores de un formulario junto a cada campo (aria-describedby) y un resumen arriba con TODOS los errores,
+ * cada uno enlazado a su campo (el foco va al resumen: quien usa lector de pantalla oye la lista completa).
+ * `titulo` cambia el encabezado del resumen cuando no se está guardando nada («Revisa las fechas:»).
+ */
+export function mostrarErrores(form, errores, { titulo = null } = {}) {
   for (const el of form.querySelectorAll('.campo__error')) el.remove();
   for (const el of form.querySelectorAll('[aria-invalid]')) {
     el.removeAttribute('aria-invalid');
     el.removeAttribute('aria-describedby');
   }
-  const resumen = form.querySelector(resumenSel);
+  const resumen = form.querySelector('[data-errores]');
   if (resumen) {
     resumen.innerHTML = '';
     resumen.hidden = !errores.length;
   }
   if (!errores.length) return;
-  const sueltos = [];
+  const items = [];
   for (const e of errores) {
-    const campo = e.campo && form.querySelector(`[name="${e.campo}"]`);
+    const campo = e.campo && form.querySelector(`[name="${CSS.escape(e.campo)}"]`);
     if (campo) {
+      if (!campo.id) campo.id = `campo-${e.campo}-${Math.random().toString(36).slice(2, 6)}`;
       const id = `err-${e.campo}-${Math.random().toString(36).slice(2, 6)}`;
       const p = document.createElement('p');
       p.className = 'campo__error';
@@ -151,12 +182,20 @@ export function mostrarErrores(form, errores, resumenSel = '[data-errores]') {
       const contenedor = campo.closest('.campo') || campo.parentElement;
       contenedor.append(p);
       campo.setAttribute('aria-invalid', 'true');
-      campo.setAttribute('aria-describedby', id);
-    } else sueltos.push(e.mensaje);
+      campo.setAttribute('aria-describedby', [campo.getAttribute('aria-describedby'), id].filter(Boolean).join(' '));
+      items.push({ mensaje: e.mensaje, campoId: campo.id });
+    } else items.push({ mensaje: e.mensaje });
   }
   if (resumen) {
-    const lista = sueltos.length ? sueltos : errores.map((e) => e.mensaje);
-    resumen.innerHTML = `<p class="resumen-errores__titulo">${lista.length === 1 ? 'No se pudo guardar:' : 'No se pudo guardar, por esto:'}</p><ul>${lista.map((m) => `<li>${esc(m)}</li>`).join('')}</ul>`;
+    const t = titulo || (items.length === 1 ? 'No se pudo guardar:' : 'No se pudo guardar, por esto:');
+    resumen.innerHTML = `<p class="resumen-errores__titulo">${esc(t)}</p><ul>${items.map((i) => `<li>${i.campoId ? `<a href="#${esc(i.campoId)}" data-ir-campo="${esc(i.campoId)}">${esc(i.mensaje)}</a>` : esc(i.mensaje)}</li>`).join('')}</ul>`;
+    // Los enlaces llevan al campo sin tocar la dirección (en reservar.html el # guarda la sala del relevo).
+    resumen.onclick = (ev) => {
+      const a = ev.target.closest('[data-ir-campo]');
+      if (!a) return;
+      ev.preventDefault();
+      document.getElementById(a.dataset.irCampo)?.focus();
+    };
     resumen.hidden = false;
     resumen.focus();
   } else {

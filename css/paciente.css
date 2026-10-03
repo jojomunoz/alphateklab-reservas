@@ -28,6 +28,8 @@
 .resultado--ok .resultado__titulo { color: var(--ok); }
 .resultado--cancelada .resultado__titulo { color: var(--tinta-2); }
 .resultado--aviso .resultado__titulo { color: var(--aviso); }
+/* Enviado por el relevo y sin respuesta de la recepción todavía: ni verde (no se sabe) ni alerta. */
+.resultado--enviado .resultado__titulo { color: var(--primario-texto); }
 .resultado__marca { stroke-dasharray: 20; stroke-dashoffset: 20; animation: trazar 360ms var(--ease-salida) 80ms forwards; }
 @keyframes trazar { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) { .resultado__marca { animation: none; stroke-dashoffset: 0; } }
@@ -44,7 +46,7 @@ p.pie-paciente { display: block; }
 /* ── Autoagendamiento ───────────────────────────────────────────────── */
 .pasos { display: grid; gap: 22px; }
 .paso { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; }
-.paso > legend { font-family: var(--f-titulo); font-weight: var(--peso-titulo); font-size: 1.125rem; margin-bottom: 8px; }
+.paso > legend { font-family: var(--f-titulo); font-weight: var(--peso-titulo); word-spacing: var(--espacio-titulo); font-size: 1.125rem; margin-bottom: 8px; }
 .paso__num { display: block; font-family: var(--f-texto); font-size: 0.8125rem; font-weight: 650; color: var(--tinta-3); letter-spacing: 0; }
 .paso--bloqueado { opacity: 1; }
 .paso--bloqueado > *:not(legend) { display: none; }
@@ -74,3 +76,5 @@ p.pie-paciente { display: block; }
 .resumen-pedido { background: var(--superficie-2); padding: 12px 14px; display: grid; gap: 4px; font-size: 0.9375rem; }
 .resumen-pedido strong { font-variant-numeric: tabular-nums; }
 .enviar-fijo { position: sticky; bottom: 0; background: var(--fondo); padding: 12px 0; border-top: 1px solid var(--linea); margin-top: 8px; }
+/* Lo que recibe el foco no queda tapado por la barra pegajosa de «Pedir la cita» (WCAG 2.4.11). */
+html:has(.enviar-fijo) { scroll-padding-bottom: 96px; }

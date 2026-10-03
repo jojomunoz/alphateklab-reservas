@@ -4,15 +4,14 @@
 import { esc, icono, anunciar, $ } from './ui.mjs';
 import { cargar, alCambiar, transaccion, preferencia } from './almacen.mjs';
 import { iniciarBarra, pintarMarca, relojChip, plantillaCitas } from './demo.mjs';
-import { escuchar, pintarPieRelevo } from './relevo.mjs';
-import { aplicarMensaje } from '../nucleo/mensajes-relevo.mjs';
+import { escucharEnRecepcion, pintarPieRelevo } from './relevo.mjs';
 import { NEGOCIOS_CITAS } from '../nucleo/negocios.mjs';
 import {
   fechaISO, fechaLarga, fechaCorta, horaTexto, horaCorta, horaDeMinutos, sumarDias, lunesDe, msDeFecha, minutosDelDia, diaSemana,
-  DIAS_CORTOS, MESES, leerISO, MIN,
+  diaRelativo, DIAS_CORTOS, MESES, leerISO, MIN,
 } from '../nucleo/tiempo.mjs';
 import { tramosDelDia, motivoCierre, libresDelRecurso, servicioDe, profesionalDe, salaDe, ESTADOS } from '../nucleo/agenda.mjs';
-import { pacienteDe, resolverTarea, retirarDeEspera, citaDe, cambiarEstado } from '../nucleo/operaciones.mjs';
+import { pacienteDe, resolverTarea, retirarDeEspera, citaDe, cambiarEstado, cambiarAjustes, negocioEfectivo } from '../nucleo/operaciones.mjs';
 import { sinConfirmar, conInasistencias, porProfesional, costoMensajesDelMes, asistenciaDe, porcentaje, ENLACE_PRODUCCION } from '../nucleo/riesgo.mjs';
 import { CANALES } from '../nucleo/recordatorios.mjs';
 import { TARIFAS, dolares } from '../nucleo/mensajes.mjs';
@@ -28,6 +27,7 @@ const vista = {
   recurso: preferencia('recurso') === 'sala' ? 'sala' : 'profesional',
   fecha: null,
   busqueda: '',
+  ajustesAbiertos: false,
 };
 let plantilla = plantillaCitas();
 const ctx = {
@@ -114,11 +114,11 @@ function htmlColumna({ negocio, st, ahora, fecha, recurso, inicioMin, finMin, se
       cursor = b;
     });
     if (cursor < finMin) html += `<div class="cerrado" style="top:calc(var(--escala) * ${cursor - inicioMin});height:calc(var(--escala) * ${finMin - cursor})"></div>`;
-    if (!semana) {
-      for (const l of libresDelRecurso({ negocio: { ...negocio, ajustes: { ...negocio.ajustes, ...st.ajustes } }, citas: st.citas, fecha, recurso, ahora, minimoMin: Math.min(...negocio.servicios.map((s) => s.min)) })) {
-        const top = minutosDelDia(l.inicio) - inicioMin, alto = (l.fin - l.inicio) / MIN;
-        html += `<button type="button" class="libre" data-libre="${l.inicio}" data-recurso="${recurso.tipo}:${recurso.id}" style="top:calc(var(--escala) * ${top} + 1px);height:calc(var(--escala) * ${alto} - 3px)" aria-label="Agendar en el hueco libre de ${horaTexto(l.inicio)} a ${horaTexto(l.fin)} con ${esc(recurso.nombre)}">${alto >= 25 ? `${icono('mas')}<span>Libre ${horaCorta(l.inicio)}–${horaCorta(l.fin)}</span>` : ''}</button>`;
-      }
+    // Huecos libres: en el día, con texto; en la semana, una franja punteada sin texto (abre «Agendar» igual).
+    for (const l of libresDelRecurso({ negocio: negocioEfectivo(negocio, st), citas: st.citas, fecha, recurso, ahora, minimoMin: Math.min(...negocio.servicios.map((s) => s.min)) })) {
+      const top = minutosDelDia(l.inicio) - inicioMin, alto = (l.fin - l.inicio) / MIN;
+      const texto = !semana && alto >= 25 ? `${icono('mas')}<span>Libre ${horaCorta(l.inicio)}–${horaCorta(l.fin)}</span>` : '';
+      html += `<button type="button" class="libre${semana ? ' libre--semana' : ''}" data-libre="${l.inicio}" data-recurso="${recurso.tipo}:${recurso.id}" style="top:calc(var(--escala) * ${top} + 1px);height:calc(var(--escala) * ${alto} - 3px)" aria-label="Agendar en el hueco libre de ${horaTexto(l.inicio)} a ${horaTexto(l.fin)}${semana ? ` del ${esc(fechaLarga(fecha))}` : ''} con ${esc(recurso.nombre)}">${texto}</button>`;
     }
     const campo = recurso.tipo === 'profesional' ? 'profesionalId' : 'salaId';
     for (const c of st.citas) {
@@ -148,7 +148,7 @@ function pintarAgenda(main) {
   const canceladas = citasVistas.filter((c) => c.estado === 'cancelada');
 
   let horas = '';
-  for (let m = inicioMin; m <= finMin; m += 60) horas += `<span class="agenda__hora" style="top:calc(var(--escala) * ${m - inicioMin})">${horaDeMinutos(m).replace(':00', '')}</span>`;
+  for (let m = inicioMin; m <= finMin; m += 60) horas += `<span class="agenda__hora${m === finMin ? ' agenda__hora--ultima' : ''}" style="top:calc(var(--escala) * ${m - inicioMin})">${horaDeMinutos(m).replace(':00', '')}</span>`;
   const columnas = semana ? fechas.length * recs.length : recs.length;
   let cabeza = '<div class="agenda__cabeza" aria-hidden="true"></div>';
   let cuerpo = `<div class="agenda__horas" style="height:calc(var(--escala) * ${finMin - inicioMin})">${horas}</div>`;
@@ -183,24 +183,39 @@ function pintarAgenda(main) {
       </div>
       <button type="button" class="boton boton--primario" data-nueva>${icono('mas')} Agendar cita</button>
     </div>
-    <p class="resumen-hoy"><a href="#hoy-recepcion">Hoy en recepción:</a> <span>${sc.length} sin confirmar</span> <span>${tareas.length} por llamar</span> <span>${enSala.length} en sala</span></p>
+    <p class="resumen-hoy"><a href="#hoy-recepcion">En recepción:</a> <span>${sc.length} sin confirmar hoy y mañana</span> <span>${tareas.length} por llamar</span> <span>${enSala.length} en sala</span></p>
     <div class="disposicion${semana ? ' disposicion--semana' : ''}">
       <div>
         <div class="agenda-scroll" tabindex="0" aria-label="Agenda; desplázate para ver más columnas u horas">
           <div class="agenda${semana ? ' agenda--semana' : ''}" style="--columnas:${columnas}">${cabeza}${cuerpo}</div>
         </div>
-        <div class="leyenda" aria-label="Leyenda">${['pendiente', 'confirmada', 'reprogramada', 'atendida', 'no_asistio'].map(insigniaEstado).join('')}<span><span class="libre" style="position:static;display:inline-flex;padding:0 6px">Libre</span> = hueco para agendar</span></div>
+        <div class="leyenda" aria-label="Leyenda">${['pendiente', 'confirmada', 'reprogramada', 'atendida', 'no_asistio'].map(insigniaEstado).join('')}<span class="leyenda__libre"><span class="libre libre--muestra${semana ? ' libre--semana' : ''}">${semana ? '' : 'Libre'}</span> = hueco para agendar</span></div>
+        ${htmlAjustes(negocio, st)}
         ${canceladas.length ? `<details class="canceladas-dia"><summary>${canceladas.length} ${canceladas.length === 1 ? 'cita cancelada' : 'citas canceladas'} ${semana ? 'esta semana' : 'este día'} (no ocupan lugar)</summary><ul class="filas">${canceladas.map((c) => { const p = pacienteDe(st, c.pacienteId); return `<li style="padding:6px 0"><button type="button" class="persona__nombre" data-cita="${c.id}">${esc(cuando(c.inicio))} · ${esc(p ? p.nombre : '—')}</button></li>`; }).join('')}</ul></details>` : ''}
       </div>
       <aside class="lateral" id="hoy-recepcion" aria-label="Hoy en recepción">${htmlLateral(st, negocio, ahora, sc, tareas, enSala)}</aside>
     </div>`;
 }
 
+/** Ajustes de la agenda que la recepción puede cambiar en la demo (en producción, por negocio). */
+function htmlAjustes(negocio, st) {
+  const aj = negocioEfectivo(negocio, st).ajustes;
+  return `<details class="ajustes-agenda"${vista.ajustesAbiertos ? ' open' : ''}><summary>${icono('der', 'ajustes-agenda__marca')} Ajustes de la agenda</summary>
+    <div class="ajustes-agenda__cuerpo">
+      <div class="campo"><label for="aj-buffer">Minutos libres entre una cita y la siguiente</label>
+        <select id="aj-buffer" data-ajuste="buffer">${[0, 5, 10, 15, 20, 30].map((m) => `<option value="${m}"${m === aj.buffer ? ' selected' : ''}>${m ? `${m} minutos` : 'Ninguno'}</option>`).join('')}</select>
+        <p class="campo__ayuda">Vale para las horas que se ofrecen y las citas nuevas; las que ya están no se mueven.</p></div>
+      <label class="opcion"><input type="checkbox" data-ajuste="autoConfirmar"${aj.autoConfirmar ? ' checked' : ''}> <span>Las citas que se piden en la página quedan confirmadas al momento (si no, quedan pendientes y se les pide confirmar)</span></label>
+    </div>
+  </details>`;
+}
+
 function htmlLateral(st, negocio, ahora, sc, tareas, enSala) {
   const v = negocio.vocab;
+  // «hoy», «mañana», «ayer» o la fecha: una cita del sábado no puede leerse como «mañana» el lunes.
   const fila = (c, extra = '', acciones = '') => {
     const p = pacienteDe(st, c.pacienteId);
-    return `<li class="fila-recepcion"><div class="fila-recepcion__cabeza"><button type="button" class="fila-recepcion__quien" data-cita="${c.id}">${esc(p ? p.nombre : '—')}</button><span class="fila-recepcion__cuando">${fechaISO(c.inicio) === fechaISO(ahora) ? 'hoy' : 'mañana'} ${esc(horaTexto(c.inicio))}</span></div>${extra}${acciones ? `<div class="acciones">${acciones}</div>` : ''}</li>`;
+    return `<li class="fila-recepcion"><div class="fila-recepcion__cabeza"><button type="button" class="fila-recepcion__quien" data-cita="${c.id}">${esc(p ? p.nombre : '—')}</button><span class="fila-recepcion__cuando">${esc(diaRelativo(c.inicio, ahora))} ${esc(horaTexto(c.inicio))}</span></div>${extra}${acciones ? `<div class="acciones">${acciones}</div>` : ''}</li>`;
   };
   const tel = (p) => p && p.telefono ? `<a class="boton" href="tel:${esc(p.telefono)}">${icono('llamar')} Llamar</a>` : '';
   return `
@@ -318,7 +333,7 @@ function pintarRiesgo(main) {
         <div style="overflow-x:auto"><table class="tabla tabla--apilable"><thead><tr><th scope="col">${esc(v.Profesional)}</th><th scope="col">No asistió (de las citas ya pasadas)</th><th scope="col">Confirmó (de las que recibieron recordatorio)</th></tr></thead><tbody>
           ${filas.map((f) => `<tr><td class="tabla__titulo-fila">${esc(f.profesional.nombre)}</td><td data-etiqueta="No asistió">${barraTasa(f.inasistencia, true)}</td><td data-etiqueta="Confirmó">${barraTasa(f.confirmacion, false)}</td></tr>`).join('')}
         </tbody></table></div>
-        <p class="fuente" style="padding:0 16px 12px">Se cuentan solo las citas de esta demo. Referencia pública: en la Policlínica Generoso Guardia de la CSS faltó el 30 % de los pacientes de dermatología (<a href="https://www.tvn-2.com/nacionales/funciona-sistema-citas-policlinicas-concurridas-san-migueltito_1_2239674.html" rel="noopener">TVN, 6 de mayo de 2026</a>).</p>
+        <p class="fuente" style="padding:0 16px 12px">Se cuentan solo las citas de esta demo.${negocio.id === 'consultorio' ? ' Referencia pública: en la Policlínica Generoso Guardia de la CSS, la inasistencia en dermatología llega al 30 % (<a href="https://www.tvn-2.com/nacionales/funciona-sistema-citas-policlinicas-concurridas-san-migueltito_1_2239674.html" rel="noopener">TVN, 6 de mayo de 2026</a>).' : ''}</p>
       </section>
       <section class="panel ancho" aria-labelledby="r-co">
         <div class="panel__cabeza"><h2 id="r-co">Costo de mensajes de ${esc(nombreMes)}</h2><strong class="numeros">${dolares(costo.min)} a ${dolares(costo.max)}</strong></div>
@@ -326,7 +341,7 @@ function pintarRiesgo(main) {
           ${Object.entries(costo.por).map(([k, f]) => `<tr><td class="tabla__titulo-fila">${CANALES[k]}</td><td class="der" data-etiqueta="Enviados">${f.mensajes}</td><td class="der" data-etiqueta="Se cobran">${f.unidades} ${k === 'sms' ? 'segmentos' : 'mensajes'}</td><td data-etiqueta="Precio por unidad">${TARIFAS[k].max ? `${dolares(TARIFAS[k].min, 3)} a ${dolares(TARIFAS[k].max, 3)}` : 'casi 0'}</td><td class="der" data-etiqueta="Estimado">${f.max ? `${dolares(f.min)} a ${dolares(f.max)}` : '—'}</td></tr>`).join('')}
         </tbody></table></div>
         <div class="panel__cuerpo">
-          <p class="fuente">El costo de los mensajes va aparte de la suscripción: así una clínica con mucho volumen no se come el margen. WhatsApp: plantilla de utilidad para Panamá («Rest of Latin America»), unos US$0.011 a 0.013 por mensaje entregado según tablas de terceros; la oficial es la de <a href="https://developers.facebook.com/docs/whatsapp/pricing" rel="noopener">Meta</a> y hay que revisarla antes de fijar precios. SMS por Twilio a Panamá: US$0.10 a 0.18 por segmento; un acento (á, í, ó, ú) baja el segmento de 160 a 70 caracteres. El cálculo usa un enlace corto como el de producción (${ENLACE_PRODUCCION.length} caracteres), no el largo de esta demo.</p>
+          <p class="fuente">Los mensajes se cobran aparte de la suscripción, según lo que se envía. WhatsApp: plantilla de utilidad para Panamá («Rest of Latin America»), unos US$0.011 a 0.013 por mensaje entregado según tablas de terceros; la oficial es la de <a href="https://developers.facebook.com/docs/whatsapp/pricing" rel="noopener">Meta</a> y hay que revisarla antes de fijar precios. SMS por Twilio a Panamá: US$0.10 a 0.18 por segmento; un acento (á, í, ó, ú) baja el segmento de 160 a 70 caracteres. El cálculo usa un enlace corto como el de producción (${ENLACE_PRODUCCION.length} caracteres), no el largo de esta demo.</p>
         </div>
       </section>
     </div>`;
@@ -349,6 +364,7 @@ document.addEventListener('click', (ev) => {
   const t = ev.target;
   const b = (sel) => t.closest(sel);
   const { ahora } = datos(ctx);
+  if (b('.ajustes-agenda summary')) { requestAnimationFrame(() => { vista.ajustesAbiertos = !!main.querySelector('.ajustes-agenda')?.open; }); return; }
   if (b('[data-mover]')) {
     const m = b('[data-mover]').dataset.mover;
     if (m === 'hoy') vista.fecha = fechaISO(ahora);
@@ -384,6 +400,16 @@ document.addEventListener('click', (ev) => {
   }
 });
 
+document.addEventListener('change', (ev) => {
+  const t = ev.target.closest('[data-ajuste]');
+  if (!t) return;
+  const k = t.dataset.ajuste;
+  const valor = k === 'buffer' ? +t.value : t.checked;
+  const r = operar(ctx, (s) => cambiarAjustes(s, { [k]: valor }));
+  if (r.ok) anunciar(k === 'buffer' ? (valor ? `Se dejan ${valor} minutos libres entre citas.` : 'Sin minutos libres entre citas.') : valor ? 'Las citas pedidas en la página quedan confirmadas al momento.' : 'Las citas pedidas en la página quedan pendientes.');
+  $(`[data-ajuste="${k}"]`)?.focus();
+});
+
 addEventListener('hashchange', () => {
   const h = location.hash.slice(1);
   if (PESTANAS.includes(h)) { vista.pestana = h; pintar(); $('#principal').focus({ preventScroll: true }); }
@@ -402,8 +428,4 @@ alCambiar((e, info) => {
 
 // Respuestas que llegan desde otro teléfono por el relevo.
 pintarPieRelevo($('#pie'), 'conectando');
-escuchar(estado.sala, (mensaje) => {
-  let r;
-  transaccion((e) => { r = aplicarMensaje(e, mensaje); return r.resultado === 'repetida' || r.resultado === 'forma' ? { ok: false } : { ok: true }; }, 'relevo');
-  if (r && r.aviso && r.resultado !== 'repetida') anunciar(r.aviso);
-}, (est) => pintarPieRelevo($('#pie'), est));
+escucharEnRecepcion(estado.sala, { transaccion, anunciar, alEstado: (est) => pintarPieRelevo($('#pie'), est) });
