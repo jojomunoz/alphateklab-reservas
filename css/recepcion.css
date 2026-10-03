@@ -156,6 +156,7 @@
 
 /* ── Riesgo ─────────────────────────────────────────────────────────── */
 .rejilla-riesgo { display: grid; gap: 20px; }
+.rejilla-riesgo > * { min-width: 0; }
 @media (min-width: 900px) { .rejilla-riesgo { grid-template-columns: 1fr 1fr; } .rejilla-riesgo .ancho { grid-column: 1 / -1; } }
 .barra-tasa { display: grid; grid-template-columns: 1fr; gap: 3px; min-width: 140px; }
 .barra-tasa__pista { height: 8px; background: var(--superficie-2); position: relative; }

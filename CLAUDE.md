@@ -29,7 +29,9 @@ especificación: `~/alphateklab/ESPEC-reservas.md`; guía de diseño: `~/Documen
 - **Radios:** 0 en paneles, 4 px en controles, 2 px en insignias. Sombras solo en diálogos y avisos.
 - **Movimiento:** solo responder (120 ms) y estado (220 ms); la aguja del riel viaja 340 ms. Hover solo con puntero
   fino. «Reducir movimiento» deja fundidos cortos y quita el viaje de la aguja.
-- **Barra de la demo** (de alphateklab, no del cliente): grafito `#1b2124` con la señal amarilla de la casa en la
-  vista actual.
+- **Barra de la demo** (de alphateklab, no del cliente): marca de la casa del 3-oct-2026. Fondo grafito `#202729`,
+  logo `assets/marca/logo-oscuro.svg` (copia del sitio de la agencia; enlaza a `../alphateklab/`), la vista actual
+  y el foco en ámbar `#F2B544`. El favicon es la «a» de alphateklab con su módulo ámbar. Los negocios de ejemplo
+  conservan su propia marca (Hanken/Bitter y sus primarios): Manrope e Inter son solo de la agencia.
 - **Textos:** tuteo, español de Panamá, montos `B/.1,234.50` y `US$0.012`, horas `9:30 a. m.`. Nada de cifras sin
   fuente: el 30 % de la CSS (TVN) y Robotham 2016 van con enlace; el «hasta 80 %» de los vendedores no se cita.

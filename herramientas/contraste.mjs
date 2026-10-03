@@ -58,8 +58,12 @@ for (const [marca, t] of Object.entries(marcas)) {
     console.log(filas.join('\n'));
   }
 }
-const demo = [['#eef2f2', '#1b2124'], ['#b7c2c4', '#1b2124'], ['#eef2f2', '#263034']];
+// Barra de alphateklab: grafito #202729 y ámbar #F2B544 (marca del 3-oct-2026). El ámbar es subrayado y foco (forma, 3:1),
+// y el logo lleva texto claro #F7F5EF.
+const demo = [['#eef2f2', '#202729'], ['#b7c2c4', '#202729'], ['#eef2f2', '#2b3436'], ['#b7c2c4', '#2b3436'], ['#f7f5ef', '#202729']];
+const demoFormas = [['#f2b544', '#202729'], ['#f2b544', '#2b3436']];
 console.log('\nbarra de la demo');
 for (const [a, b] of demo) { const c = contraste(a, b); if (c < 4.5) fallos++; console.log(`${c >= 4.5 ? ' ' : '✗'} ${a} sobre ${b}: ${c.toFixed(2)}`); }
+for (const [a, b] of demoFormas) { const c = contraste(a, b); if (c < 3) fallos++; console.log(`${c >= 3 ? ' ' : '✗'} ${a} sobre ${b} (forma): ${c.toFixed(2)}`); }
 console.log(`\n${fallos ? `${fallos} pares por debajo del mínimo` : 'Todos los pares pasan (texto ≥ 4,5:1; formas ≥ 3:1).'}`);
 process.exitCode = fallos ? 1 : 0;

@@ -33,7 +33,7 @@ function pintarCabeza() {
   pintarMarca($('#marca'), negocio, {
     enlace: 'citas.html',
     extra: `<nav class="pestanas marca__nav" aria-label="Recepción">
-      <a href="citas.html#agenda">Agenda</a><a href="citas.html#pacientes">${esc(negocio.vocab.Personas)}</a><a href="citas.html#espera">Lista de espera</a><a href="citas.html#riesgo">Riesgo</a><a href="bandeja.html" aria-current="page">Bandeja ${icono('reloj')}</a>
+      <a href="citas.html#agenda">Agenda</a><a href="citas.html#pacientes">${esc(negocio.vocab.Personas)}</a><a href="citas.html#espera"><span class="t-largo">Lista de espera</span><span class="t-corto">Espera</span></a><a href="citas.html#riesgo">Riesgo</a><a href="bandeja.html" aria-current="page">Bandeja ${icono('reloj')}</a>
     </nav>`,
   });
   document.title = `Bandeja de envíos · ${negocio.nombre} (${negocio.rotulo}) · alphateklab Reservas`;

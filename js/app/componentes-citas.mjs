@@ -385,7 +385,7 @@ export function abrirCita(ctx, citaId) {
     if (accion === 'cancelada') {
       const ok = await confirmar({
         titulo: 'Cancelar la cita',
-        texto: `Se cancela la cita de ${esc(p ? p.nombre : '')} del ${esc(fechaLarga(cita.inicio))} a las ${esc(horaTexto(cita.inicio))} Se detienen sus recordatorios y el horario se ofrece a la lista de espera.`,
+        texto: `Se cancela la cita de ${esc(p ? p.nombre : '')} del ${esc(fechaLarga(cita.inicio))} a las ${esc(horaTexto(cita.inicio))}. Se detienen sus recordatorios y el horario se ofrece a la lista de espera.`,
         si: 'Cancelar la cita', no: 'No cancelar', peligro: true,
       });
       if (!ok) return;

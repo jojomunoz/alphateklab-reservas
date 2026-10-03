@@ -45,14 +45,14 @@ function pintarCabeza() {
   const pest = [
     ['agenda', 'Agenda', ''],
     ['pacientes', v.Personas, ''],
-    ['espera', 'Lista de espera', enEspera ? `<span class="cuenta">${enEspera}</span>` : ''],
+    ['espera', '', enEspera ? `<span class="cuenta">${enEspera}</span>` : ''],
     ['riesgo', 'Riesgo', ''],
   ];
   pintarMarca($('#marca'), negocio, {
     enlace: 'citas.html',
     extra: `${relojChip(ahora)}
       <nav class="pestanas marca__nav" aria-label="Recepción">
-        ${pest.map(([id, txt, extra]) => `<a href="#${id}"${vista.pestana === id ? ' aria-current="page"' : ''}>${esc(txt)}${extra}</a>`).join('')}
+        ${pest.map(([id, txt, extra]) => `<a href="#${id}"${vista.pestana === id ? ' aria-current="page"' : ''}>${id === 'espera' ? '<span class="t-largo">Lista de espera</span><span class="t-corto">Espera</span>' : esc(txt)}${extra}</a>`).join('')}
         <a href="bandeja.html">Bandeja ${icono('reloj')}</a>
       </nav>`,
   });
@@ -273,8 +273,8 @@ function pintarEspera(main) {
     <div class="barra-lista"><button type="button" class="boton boton--primario" data-agregar-espera>${icono('mas')} Agregar a la lista</button></div>
     <section class="panel" aria-labelledby="t-esp">
       <div class="panel__cabeza"><h2 id="t-esp">Esperando (${esperando.length})</h2></div>
-      ${esperando.length ? `<table class="tabla"><thead><tr><th scope="col">${esc(v.Persona)}</th><th scope="col">Servicio</th><th scope="col">${esc(v.Profesional)}</th><th scope="col">Desde</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead><tbody>
-        ${esperando.map((e) => { const p = pacienteDe(st, e.pacienteId); return `<tr><td><button type="button" class="persona__nombre" data-persona="${e.pacienteId}">${esc(p ? p.nombre : '—')}</button>${e.nota ? `<br><small class="campo__ayuda">${esc(e.nota)}</small>` : ''}</td><td>${esc(servicioDe(negocio, e.servicioId).nombre)}</td><td>${e.profesionalId ? esc(profesionalDe(negocio, e.profesionalId).nombre) : 'Cualquiera'}</td><td>${esc(fechaCorta(e.desde))}</td><td class="der"><button type="button" class="boton" data-retirar="${e.id}">Quitar</button></td></tr>`; }).join('')}
+      ${esperando.length ? `<table class="tabla tabla--apilable"><thead><tr><th scope="col">${esc(v.Persona)}</th><th scope="col">Servicio</th><th scope="col">${esc(v.Profesional)}</th><th scope="col">Desde</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead><tbody>
+        ${esperando.map((e) => { const p = pacienteDe(st, e.pacienteId); return `<tr><td data-etiqueta="${esc(v.Persona)}"><button type="button" class="persona__nombre" data-persona="${e.pacienteId}">${esc(p ? p.nombre : '—')}</button>${e.nota ? `<br><small class="campo__ayuda">${esc(e.nota)}</small>` : ''}</td><td data-etiqueta="Servicio">${esc(servicioDe(negocio, e.servicioId).nombre)}</td><td data-etiqueta="${esc(v.Profesional)}">${e.profesionalId ? esc(profesionalDe(negocio, e.profesionalId).nombre) : 'Cualquiera'}</td><td data-etiqueta="Desde">${esc(fechaCorta(e.desde))}</td><td class="der"><button type="button" class="boton" data-retirar="${e.id}">Quitar</button></td></tr>`; }).join('')}
       </tbody></table>` : '<p class="vacio"><strong>Nadie esperando.</strong>Agrega a quien quiera una cita antes de la que consiguió.</p>'}
     </section>
     <section class="panel" aria-labelledby="t-of" style="margin-top:20px">
@@ -315,15 +315,15 @@ function pintarRiesgo(main) {
       </section>
       <section class="panel ancho" aria-labelledby="r-pr">
         <div class="panel__cabeza"><h2 id="r-pr">Por ${esc(v.profesional)}</h2></div>
-        <div style="overflow-x:auto"><table class="tabla"><thead><tr><th scope="col">${esc(v.Profesional)}</th><th scope="col">No asistió (de las citas ya pasadas)</th><th scope="col">Confirmó (de las que recibieron recordatorio)</th></tr></thead><tbody>
-          ${filas.map((f) => `<tr><td>${esc(f.profesional.nombre)}</td><td>${barraTasa(f.inasistencia, true)}</td><td>${barraTasa(f.confirmacion, false)}</td></tr>`).join('')}
+        <div style="overflow-x:auto"><table class="tabla tabla--apilable"><thead><tr><th scope="col">${esc(v.Profesional)}</th><th scope="col">No asistió (de las citas ya pasadas)</th><th scope="col">Confirmó (de las que recibieron recordatorio)</th></tr></thead><tbody>
+          ${filas.map((f) => `<tr><td class="tabla__titulo-fila">${esc(f.profesional.nombre)}</td><td data-etiqueta="No asistió">${barraTasa(f.inasistencia, true)}</td><td data-etiqueta="Confirmó">${barraTasa(f.confirmacion, false)}</td></tr>`).join('')}
         </tbody></table></div>
         <p class="fuente" style="padding:0 16px 12px">Se cuentan solo las citas de esta demo. Referencia pública: en la Policlínica Generoso Guardia de la CSS faltó el 30 % de los pacientes de dermatología (<a href="https://www.tvn-2.com/nacionales/funciona-sistema-citas-policlinicas-concurridas-san-migueltito_1_2239674.html" rel="noopener">TVN, 6 de mayo de 2026</a>).</p>
       </section>
       <section class="panel ancho" aria-labelledby="r-co">
         <div class="panel__cabeza"><h2 id="r-co">Costo de mensajes de ${esc(nombreMes)}</h2><strong class="numeros">${dolares(costo.min)} a ${dolares(costo.max)}</strong></div>
-        <div style="overflow-x:auto"><table class="tabla"><thead><tr><th scope="col">Canal</th><th scope="col" class="der">Mensajes enviados</th><th scope="col" class="der">Se cobran</th><th scope="col">Precio por unidad</th><th scope="col" class="der">Estimado</th></tr></thead><tbody>
-          ${Object.entries(costo.por).map(([k, f]) => `<tr><td>${CANALES[k]}</td><td class="der">${f.mensajes}</td><td class="der">${f.unidades} ${k === 'sms' ? 'segmentos' : 'mensajes'}</td><td>${TARIFAS[k].max ? `${dolares(TARIFAS[k].min, 3)} a ${dolares(TARIFAS[k].max, 3)}` : 'casi 0'}</td><td class="der">${f.max ? `${dolares(f.min)} a ${dolares(f.max)}` : '—'}</td></tr>`).join('')}
+        <div style="overflow-x:auto"><table class="tabla tabla--apilable"><thead><tr><th scope="col">Canal</th><th scope="col" class="der">Mensajes enviados</th><th scope="col" class="der">Se cobran</th><th scope="col">Precio por unidad</th><th scope="col" class="der">Estimado</th></tr></thead><tbody>
+          ${Object.entries(costo.por).map(([k, f]) => `<tr><td class="tabla__titulo-fila">${CANALES[k]}</td><td class="der" data-etiqueta="Enviados">${f.mensajes}</td><td class="der" data-etiqueta="Se cobran">${f.unidades} ${k === 'sms' ? 'segmentos' : 'mensajes'}</td><td data-etiqueta="Precio por unidad">${TARIFAS[k].max ? `${dolares(TARIFAS[k].min, 3)} a ${dolares(TARIFAS[k].max, 3)}` : 'casi 0'}</td><td class="der" data-etiqueta="Estimado">${f.max ? `${dolares(f.min)} a ${dolares(f.max)}` : '—'}</td></tr>`).join('')}
         </tbody></table></div>
         <div class="panel__cuerpo">
           <p class="fuente">El costo de los mensajes va aparte de la suscripción: así una clínica con mucho volumen no se come el margen. WhatsApp: plantilla de utilidad para Panamá («Rest of Latin America»), unos US$0.011 a 0.013 por mensaje entregado según tablas de terceros; la oficial es la de <a href="https://developers.facebook.com/docs/whatsapp/pricing" rel="noopener">Meta</a> y hay que revisarla antes de fijar precios. SMS por Twilio a Panamá: US$0.10 a 0.18 por segmento; un acento (á, í, ó, ú) baja el segmento de 160 a 70 caracteres. El cálculo usa un enlace corto como el de producción (${ENLACE_PRODUCCION.length} caracteres), no el largo de esta demo.</p>

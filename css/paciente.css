@@ -39,6 +39,7 @@
 
 .error-enlace { margin-top: 12px; }
 .pie-paciente { margin-top: 28px; font-size: 0.8125rem; color: var(--tinta-3); display: grid; gap: 6px; }
+p.pie-paciente { display: block; }
 
 /* ── Autoagendamiento ───────────────────────────────────────────────── */
 .pasos { display: grid; gap: 22px; }

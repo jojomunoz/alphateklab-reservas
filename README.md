@@ -108,7 +108,9 @@ GitHub Pages es solo para la demo (su política no permite alojar un SaaS comerc
 node --test pruebas/                       # lógica pura (en Node 22 entra por pruebas/index.js)
 node herramientas/contraste.mjs            # contraste de los tokens de las 4 marcas, claro y oscuro
 python3 -m http.server 4710 -d ~/alphateklab/repos &   # servir como en GitHub Pages
-node herramientas/recorrido.mjs            # recorrido completo con Playwright (390 y 1280, claro y oscuro)
+node herramientas/recorrido.mjs            # recorrido principal con Playwright (29 comprobaciones, incluye el relevo ntfy)
+node herramientas/recorrido-extra.mjs      # autoagenda, cambiar, lista de espera, reprogramar, plantillas, grupo, huésped
+node herramientas/capturas.mjs --completa  # 7 vistas × 390/1280 × claro/oscuro, con desborde y consola
 node herramientas/mutaciones.mjs           # rompe el código a propósito y comprueba que las pruebas fallan
 ```
 
