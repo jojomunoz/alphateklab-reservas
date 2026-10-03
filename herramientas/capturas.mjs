@@ -11,6 +11,7 @@ const completa = process.argv.includes('--completa');
 const VISTAS = ['index.html', 'citas.html', 'citas.html#pacientes', 'citas.html#espera', 'citas.html#riesgo', 'bandeja.html', 'confirmar.html', 'reservar.html', 'alojamiento.html', 'alojamiento-reservar.html'];
 const TAMANOS = [[390, 844], [1280, 800]];
 const filas = [];
+let ntfy429 = 0;
 const nav = await chromium.launch();
 try {
   for (const tema of ['claro', 'oscuro']) {
@@ -20,7 +21,8 @@ try {
       let errores = [];
       p.on('console', (m) => { if (m.type() === 'error') errores.push(m.text()); });
       p.on('pageerror', (e) => errores.push(e.message));
-      p.on('response', (r) => { if (r.status() >= 400 && !r.url().includes('ntfy.sh')) errores.push(`${r.status()} ${r.url()}`); });
+      // ntfy.sh limita por IP (429) y Chrome lo anota en la consola sin URL: se cuenta aparte como externo.
+      p.on('response', (r) => { if (r.url().includes('ntfy.sh') && r.status() === 429) ntfy429++; else if (r.status() >= 400 && !r.url().includes('ntfy.sh')) errores.push(`${r.status()} ${r.url()}`); });
       await p.goto(BASE + 'citas.html');
       await p.waitForSelector('.agenda');
       const enlace = await p.evaluate(() => {
@@ -38,7 +40,8 @@ try {
         const m = await p.evaluate(() => ({ cuerpo: document.documentElement.scrollWidth, ventana: innerWidth }));
         const archivo = `${DIR}${v.replace('.html', '').replace('#', '-')}-${an}-${tema}.png`;
         await p.screenshot({ path: archivo, fullPage: completa });
-        filas.push({ vista: v, ancho: an, tema, desborde: m.cuerpo > m.ventana, errores: errores.length, detalle: errores.slice(0, 2).join(' | ') });
+        const propios = ntfy429 ? errores.filter((x) => !/status of 429/.test(x)) : errores;
+        filas.push({ vista: v, ancho: an, tema, desborde: m.cuerpo > m.ventana, errores: propios.length, externos: errores.length - propios.length, detalle: propios.slice(0, 2).join(' | ') });
       }
       await ctx.close();
     }
@@ -46,7 +49,7 @@ try {
 } finally {
   await nav.close();
 }
-for (const f of filas) console.log(`${f.desborde || f.errores ? 'REVISAR' : 'ok     '} ${f.vista.padEnd(27)} ${String(f.ancho).padStart(4)} ${f.tema.padEnd(6)} desborde:${f.desborde ? 'sí' : 'no'} errores:${f.errores}${f.detalle ? ` ${f.detalle}` : ''}`);
+for (const f of filas) console.log(`${f.desborde || f.errores ? 'REVISAR' : 'ok     '} ${f.vista.padEnd(27)} ${String(f.ancho).padStart(4)} ${f.tema.padEnd(6)} desborde:${f.desborde ? 'sí' : 'no'} errores:${f.errores}${f.externos ? ` (+${f.externos} 429 de ntfy.sh)` : ''}${f.detalle ? ` ${f.detalle}` : ''}`);
 const malas = filas.filter((f) => f.desborde || f.errores).length;
 console.log(`\n${filas.length - malas} de ${filas.length} capturas sin desborde horizontal ni errores de consola. Carpeta: ${DIR}`);
 process.exitCode = malas ? 1 : 0;
