@@ -224,7 +224,7 @@ export function reprogramarCita(st, negocioBase, citaId, nuevo, ahora, { por = '
     programarRecordatorios(st, cita, ahora);
   }
   const p = pacienteDe(st, cita.pacienteId);
-  anotar(st, ahora, `${p ? p.nombre : 'Cita'}: pasa al ${fechaLarga(cita.inicio)}, ${horaTexto(cita.inicio)}.`, 'cita');
+  anotar(st, ahora, `${p ? p.nombre : 'Cita'}: pasa al ${fechaLarga(cita.inicio)}, ${horaTexto(cita.inicio)}`, 'cita');
   return { ok: true, cita, antes };
 }
 
@@ -262,6 +262,32 @@ export function cambiarEstado(st, negocioBase, citaId, estado, ahora, { por = 'r
   let oferta = null;
   if (estado === 'cancelada') oferta = ofrecerHueco(st, negocio, cita, ahora).oferta;
   return { ok: true, cita, oferta };
+}
+
+/** Cambia la regla de recordatorio de una cita: lo que faltaba se detiene y se vuelve a planificar. */
+export function cambiarRegla(st, citaId, regla, ahora) {
+  const cita = citaDe(st, citaId);
+  if (!cita) return { ok: false, errores: [{ mensaje: 'Esa cita ya no existe.' }] };
+  const errores = validarRegla(regla);
+  if (errores.length) return { ok: false, errores };
+  st.envios = aplicarRespuesta(st.envios, citaId, 'se cambió el recordatorio', ahora);
+  cita.regla = { ...regla, dias: [...regla.dias] };
+  cita.historial.push({ t: ahora, texto: 'Se cambió el recordatorio' });
+  const plan = programarRecordatorios(st, cita, ahora);
+  return { ok: true, cita, plan };
+}
+
+/** Errores de una regla de recordatorio armada en el formulario. */
+export function validarRegla(regla) {
+  const errores = [];
+  if (!regla.dias || !regla.dias.length) errores.push({ campo: 'dias', mensaje: 'Marca al menos un recordatorio (2 días antes o 1 día antes).' });
+  if (!(regla.hora >= VENTANA[0] && regla.hora < VENTANA[1])) errores.push({ campo: 'hora', mensaje: 'La hora del recordatorio tiene que estar entre las 8:00 a. m. y las 8:00 p. m.' });
+  if (!CANALES[regla.canal]) errores.push({ campo: 'canal', mensaje: 'Elige el canal.' });
+  if (regla.insistir) {
+    if (!(regla.cadaHoras >= 1 && regla.cadaHoras <= 24)) errores.push({ campo: 'cadaHoras', mensaje: 'Vuelve a escribir cada 1 a 24 horas.' });
+    if (!(regla.maxIntentos >= 1 && regla.maxIntentos <= 8)) errores.push({ campo: 'maxIntentos', mensaje: 'El máximo es de 1 a 8 mensajes.' });
+  }
+  return errores;
 }
 
 export function marcarEnSala(st, citaId, ahora) {
@@ -313,7 +339,7 @@ export function responder(st, negocioBase, r, ahora) {
     st.envios = aplicarRespuesta(st.envios, cita.id, 'cambio', ahora);
     const res = reprogramarCita(st, negocio, cita.id, { inicio: r.hueco, profesionalId: cita.profesionalId }, ahora, { por: 'paciente' });
     if (res.ok) {
-      anotar(st, ahora, `${quien} cambió su cita ${via} al ${fechaLarga(r.hueco)}, ${horaTexto(r.hueco)}.`, 'respuesta');
+      anotar(st, ahora, `${quien} cambió su cita ${via} al ${fechaLarga(r.hueco)}, ${horaTexto(r.hueco)}`, 'respuesta');
       return { ok: true, resultado: 'reprogramada', cita };
     }
     crearTarea(st, cita, `Eligió el ${fechaLarga(r.hueco)} a las ${horaTexto(r.hueco)}, pero ese horario ya no está libre`, ahora);

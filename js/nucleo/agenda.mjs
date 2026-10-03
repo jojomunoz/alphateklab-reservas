@@ -177,7 +177,7 @@ export function validarCita(negocio, citas, prop, ahora = 0, { excluirCitaId = n
     if (!cabe) {
       const apertura = tramos[0][0], cierre = tramos[tramos.length - 1][1];
       let mensaje;
-      if (a < apertura) mensaje = `Se abre a las ${horaDeMinutos(apertura)}.`;
+      if (a < apertura) mensaje = `Se abre a las ${horaDeMinutos(apertura)}`;
       else if (b > cierre) mensaje = `La cita terminaría a las ${horaDeMinutos(b)}, después del cierre (${horaDeMinutos(cierre)}).`;
       else {
         const pausa = tramos.find(([, y], i) => tramos[i + 1] && a < tramos[i + 1][0] && b > y);
@@ -199,7 +199,7 @@ export function validarCita(negocio, citas, prop, ahora = 0, { excluirCitaId = n
     errores.push({
       codigo: 'solape_profesional',
       citaId: choqueProf.id,
-      mensaje: `${prof.nombre} ya tiene una cita de ${horaTexto(choqueProf.inicio)} a ${horaTexto(choqueProf.fin)}${buffer ? ` (y se dejan ${buffer} min entre citas)` : ''}.`,
+      mensaje: `${prof.nombre} ya tiene una cita de ${horaTexto(choqueProf.inicio)} a ${horaTexto(choqueProf.fin)}${buffer ? ` (y se dejan ${buffer} min entre citas).` : ''}`,
     });
   }
   const choqueSala = ocupadas(citas, (c) => c.salaId === sala.id, excluirCitaId)
@@ -208,7 +208,7 @@ export function validarCita(negocio, citas, prop, ahora = 0, { excluirCitaId = n
     errores.push({
       codigo: 'solape_sala',
       citaId: choqueSala.id,
-      mensaje: `${sala.nombre} no está libre de ${horaTexto(choqueSala.inicio)} a ${horaTexto(choqueSala.fin)}.`,
+      mensaje: `${sala.nombre} no está libre de ${horaTexto(choqueSala.inicio)} a ${horaTexto(choqueSala.fin)}`,
     });
   }
   return errores;

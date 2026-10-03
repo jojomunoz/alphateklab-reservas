@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   crearEstadoNegocio, registrarPaciente, crearCita, reprogramarCita, cambiarEstado, responder, avanzarReloj,
   agregarAEspera, aceptarOferta, resolverTarea, revocarConsentimiento, eliminarPaciente, canalesDe, huecosAlternativos,
+  cambiarRegla, validarRegla,
 } from '../js/nucleo/operaciones.mjs';
 import { NEGOCIOS_CITAS } from '../js/nucleo/negocios.mjs';
 import { msDeFecha, HORA, DIA, MIN } from '../js/nucleo/tiempo.mjs';
@@ -176,4 +177,16 @@ test('huecos alternativos del enlace: libres, del mismo profesional, en días di
   assert.equal(new Set(hs.map((h) => new Date(h - 5 * HORA).toISOString().slice(0, 10))).size, 3);
   assert.ok(hs.every((h) => h > t('2026-10-06', '11:00') - MIN && h !== cita.inicio));
   assert.ok(hs.every((h) => h - t('2026-10-06', '9:00') < 30 * DIA));
+});
+
+test('cambiar la regla de una cita replanifica; una regla imposible no se guarda', () => {
+  const { st, p1 } = base();
+  const { cita } = crearCita(st, neg, { pacienteId: p1.id, servicioId: 'control', profesionalId: 'rios', salaId: 'c1', inicio: t('2026-10-08', '10:00'), regla }, LUNES);
+  const r = cambiarRegla(st, cita.id, { ...regla, dias: [1], insistir: false, hora: 600 }, LUNES);
+  assert.ok(r.ok);
+  const prog = st.envios.filter((e) => e.citaId === cita.id && e.estado === 'programado');
+  assert.deepEqual(prog.map((e) => e.momento), [t('2026-10-07', '10:00')]);
+  assert.equal(validarRegla({ ...regla, dias: [] })[0].campo, 'dias');
+  assert.equal(validarRegla({ ...regla, hora: 21 * 60 })[0].campo, 'hora');
+  assert.equal(cambiarRegla(st, cita.id, { ...regla, dias: [] }, LUNES).ok, false);
 });
