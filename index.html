@@ -22,9 +22,24 @@
 <main id="principal" class="inicio" tabindex="-1">
 
   <header class="inicio__cabeza">
-    <h1>Agenda de citas con recordatorios, y calendario de cabañas que se cruza con Booking y Airbnb por iCal</h1>
-    <p class="inicio__entrada">Un mismo motor con dos plantillas. Esta demo usa negocios de ejemplo: un consultorio de dermatología en Ciudad de Panamá y unas cabañas en las tierras altas de Chiriquí. Lo que hagas aquí se guarda en tu navegador; solo si respondes desde otro teléfono, la respuesta pasa por un servidor público de pruebas (ntfy.sh).</p>
+    <h1>Agenda de citas con recordatorios, y calendario de cabañas que se cruza con Booking y Airbnb</h1>
+    <p class="inicio__entrada">Un mismo motor con dos plantillas, con negocios de ejemplo: un consultorio de dermatología en Ciudad de Panamá y unas cabañas en las tierras altas de Chiriquí. Lo que hagas aquí se guarda en tu navegador.</p>
   </header>
+
+  <div class="vitrina">
+    <section class="vitrina__tarjeta" aria-labelledby="v-citas">
+      <img src="assets/inicio/agenda-640.webp" srcset="assets/inicio/agenda-640.webp 640w, assets/inicio/agenda-1280.webp 1280w" sizes="(min-width: 760px) 46vw, 100vw" width="640" height="400" alt="La agenda de recepción del consultorio de ejemplo: las citas del lunes por profesional, con la paciente en sala resaltada, y al lado las citas sin confirmar con su botón para llamar.">
+      <h2 id="v-citas" class="vitrina__titulo">La agenda de un consultorio</h2>
+      <p class="vitrina__texto">Recordatorios 2 días o 1 día antes, confirmación con un toque y la lista de quién falta por confirmar.</p>
+      <a class="boton boton--primario" href="citas.html">Probar la agenda</a>
+    </section>
+    <section class="vitrina__tarjeta vitrina__tarjeta--cabanas" aria-labelledby="v-cabanas">
+      <img src="assets/inicio/cabanas-640.webp" srcset="assets/inicio/cabanas-640.webp 640w, assets/inicio/cabanas-1280.webp 1280w" sizes="(min-width: 760px) 46vw, 100vw" width="640" height="400" alt="El calendario de las seis cabañas de ejemplo, con las reservas de cada canal: página propia, Airbnb, Booking y Expedia.">
+      <h2 id="v-cabanas" class="vitrina__titulo">El calendario de unas cabañas</h2>
+      <p class="vitrina__texto">Las reservas de la página propia, Airbnb, Booking y Expedia en una sola planilla, con alerta si un canal deja de sincronizar.</p>
+      <a class="boton boton--primario" href="alojamiento.html">Probar el calendario de cabañas</a>
+    </section>
+  </div>
 
   <div class="plantillas">
     <section class="plantilla plantilla--citas" aria-labelledby="t-citas">

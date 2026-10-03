@@ -2,8 +2,9 @@
    recordatorio como la pieza que se lleva la vista. */
 
 .inicio { max-width: 1180px; margin: 0 auto; padding: 32px 16px 72px; }
-.inicio__cabeza { max-width: 60rem; margin-bottom: 40px; }
-.inicio h1 { font-size: clamp(1.875rem, 4.6vw, 3.125rem); line-height: 1.08; letter-spacing: -0.02em; font-weight: 750; }
+.inicio__cabeza { max-width: 64rem; margin-bottom: 28px; }
+/* Dos líneas en la computadora: así las dos pantallas del producto y sus botones caben en la primera vista. */
+.inicio h1 { font-size: clamp(1.75rem, 3.6vw, 2.625rem); line-height: 1.1; letter-spacing: -0.02em; font-weight: 750; text-wrap: balance; }
 .inicio__entrada { margin-top: 16px; font-size: 1.125rem; color: var(--tinta-2); max-width: 46rem; }
 
 .plantillas { display: grid; gap: 0; border-top: 1px solid var(--linea-fuerte); }
@@ -60,3 +61,12 @@
 
 /* El pie, alineado con el contenido de la portada (no con el ancho de las vistas de trabajo). */
 .pie .pie__dentro { max-width: 1180px; }
+
+/* Vitrina: lo primero que se ve son las dos pantallas del producto, cada una con su botón para probarla. */
+.vitrina { display: grid; gap: 28px; margin-bottom: 44px; }
+@media (min-width: 760px) { .vitrina { grid-template-columns: 1fr 1fr; gap: 32px; } }
+.vitrina__tarjeta { display: grid; gap: 10px; align-content: start; justify-items: start; }
+.vitrina__tarjeta img { display: block; width: 100%; height: auto; border: 1px solid var(--linea-fuerte); background: var(--superficie); }
+.vitrina__titulo { font-size: 1.25rem; margin-top: 6px; }
+.vitrina__texto { color: var(--tinta-2); max-width: 36rem; }
+.vitrina__tarjeta--cabanas .boton--primario { background: var(--musgo); border-color: var(--musgo); color: var(--sobre-musgo); }
