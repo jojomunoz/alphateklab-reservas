@@ -62,9 +62,10 @@ function htmlResultados() {
     html += `<div class="vacio"><strong>Para ${busqueda.personas} personas no alcanzan las cabañas libres esas noches (caben ${capTotal}).</strong>Prueba otras fechas o escríbenos.</div>`;
   } else {
     html += `<p class="campo__ayuda" style="margin:6px 0 10px">${busqueda.personas > Math.max(...v.disponibles.map((c) => c.capacidad)) ? `Son ${busqueda.personas} personas: elige varias cabañas hasta sumar la capacidad. Quedan en una sola reserva.` : 'Elige una cabaña (o varias, si vienen en grupo).'}</p>
-      <div class="lista-opciones">${v.disponibles.map((c) => {
+      <div class="lista-opciones lista-opciones--cabanas">${v.disponibles.map((c) => {
         const cot = cotizar(negocio, [c.id], busqueda.llegada, busqueda.salida);
-        return `<label class="cabana-opcion"><input type="checkbox" name="cabana" value="${c.id}"${busqueda.elegidas.includes(c.id) ? ' checked' : ''}><span><strong>${esc(c.nombre)}</strong><small>Hasta ${c.capacidad} personas</small></span><span class="cabana-opcion__precio">${balboas(cot.subtotal)}<small><br>${noches} ${noches === 1 ? 'noche' : 'noches'}, sin ITBMS</small></span></label>`;
+        const foto = c.foto ? `<img class="cabana-opcion__foto" src="${esc(c.foto)}-600.webp" srcset="${esc(c.foto)}-600.webp 600w, ${esc(c.foto)}-1200.webp 1200w" sizes="(min-width: 760px) 340px, 100vw" width="600" height="400" alt="" loading="lazy" decoding="async">` : '';
+        return `<label class="cabana-opcion">${foto}<span class="cabana-opcion__cuerpo"><span class="cabana-opcion__titulo"><input type="checkbox" name="cabana" value="${c.id}"${busqueda.elegidas.includes(c.id) ? ' checked' : ''}><strong>${esc(c.nombre)}</strong></span><small>Hasta ${c.capacidad} personas${(c.detalles ?? []).map((d) => ` · ${esc(d)}`).join('')}</small><span class="cabana-opcion__precio">${balboas(cot.subtotal)} <small>por ${noches} ${noches === 1 ? 'noche' : 'noches'}, sin ITBMS</small></span></span></label>`;
       }).join('')}</div>
       <p class="campo__ayuda" style="margin-top:8px" aria-live="polite">${!capElegida ? '' : capElegida < busqueda.personas ? `Con lo elegido caben ${capElegida}; faltan lugares para ${busqueda.personas - capElegida}.` : `Hay lugar para ${busqueda.personas === 1 ? '1 persona' : `las ${busqueda.personas} personas`}.`}</p>`;
     if (v.enCierre.length) html += `<p class="nota" style="margin-top:10px">${v.enCierre.length === 1 ? 'Una cabaña no se puede' : `${v.enCierre.length} cabañas no se pueden`} reservar en línea en este momento. Para esas, escríbenos por WhatsApp.</p>`;
@@ -132,7 +133,7 @@ let huespedPendiente = null;
 function pintar() {
   pintarMarca();
   if (paso === 'buscar') {
-    main.innerHTML = htmlBuscar() + '<div class="pie-paciente"><p>Página de ejemplo hecha por alphateklab. Cabañas Quebrada Honda es un alojamiento ficticio.</p></div>';
+    main.innerHTML = htmlBuscar() + '<div class="pie-paciente"><p>Página de ejemplo hecha por alphateklab. Cabañas Quebrada Honda es un alojamiento ficticio y las fotos son ilustrativas.</p></div>';
     if (busqueda.buscado) main.querySelector('[data-resultados]').innerHTML = htmlResultados();
   } else if (paso === 'datos') main.innerHTML = htmlDatos();
   else if (paso === 'pago') { main.innerHTML = htmlPago(huespedPendiente); qrEjemplo(main.querySelector('[data-qr]')); }
