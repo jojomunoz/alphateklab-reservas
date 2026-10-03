@@ -140,15 +140,14 @@ export const NEGOCIO_ALOJAMIENTO = {
   direccion: 'Camino de ejemplo, tierras altas de Chiriquí (dirección de ejemplo)',
   telefono: '+50760000400',
   tema: 'cabanas',
-  // `foto`: ruta sin el ancho («-600.webp» / «-1200.webp»), fotos ilustrativas generadas con IA. Nance, Espavé y Caoba
-  // usan por ahora la de la cabaña de su mismo tamaño.
+  // `foto`: ruta sin el ancho («-600.webp» / «-1200.webp»); fotos ilustrativas generadas con IA, una por cabaña.
   cabanas: [
     { id: 'corotu', nombre: 'Corotú', capacidad: 2, tarifa: { baja: 85, alta: 105 }, foto: 'assets/cabanas/corotu', detalles: ['Cama queen', 'Baño propio', 'Porche con hamaca'] },
-    { id: 'nance', nombre: 'Nance', capacidad: 2, tarifa: { baja: 80, alta: 100 }, foto: 'assets/cabanas/corotu', detalles: ['Cama queen', 'Baño propio', 'Vista al jardín'] },
+    { id: 'nance', nombre: 'Nance', capacidad: 2, tarifa: { baja: 80, alta: 100 }, foto: 'assets/cabanas/nance', detalles: ['Cama queen', 'Baño propio', 'Vista al jardín'] },
     { id: 'guayacan', nombre: 'Guayacán', capacidad: 4, tarifa: { baja: 120, alta: 150 }, foto: 'assets/cabanas/guayacan', detalles: ['Cama queen y dos sencillas', '1 baño', 'Balcón en la planta alta'] },
-    { id: 'espave', nombre: 'Espavé', capacidad: 4, tarifa: { baja: 115, alta: 145 }, foto: 'assets/cabanas/guayacan', detalles: ['Dos camas queen', '1 baño', 'Terraza techada'] },
+    { id: 'espave', nombre: 'Espavé', capacidad: 4, tarifa: { baja: 115, alta: 145 }, foto: 'assets/cabanas/espave', detalles: ['Dos camas queen', '1 baño', 'Terraza techada'] },
     { id: 'cuipo', nombre: 'Cuipo', capacidad: 6, tarifa: { baja: 165, alta: 205 }, foto: 'assets/cabanas/cuipo', detalles: ['Tres recámaras', '2 baños', 'Chimenea de piedra'] },
-    { id: 'caoba', nombre: 'Caoba', capacidad: 6, tarifa: { baja: 170, alta: 210 }, foto: 'assets/cabanas/cuipo', detalles: ['Tres recámaras', '2 baños', 'Vista al volcán Barú'] },
+    { id: 'caoba', nombre: 'Caoba', capacidad: 6, tarifa: { baja: 170, alta: 210 }, foto: 'assets/cabanas/caoba', detalles: ['Tres recámaras', '2 baños', 'Vista al volcán Barú'] },
   ],
   // Temporada alta de diciembre a abril (la seca). Mínimo de noches según la temporada de la noche de llegada.
   temporadas: { alta: { meses: [12, 1, 2, 3, 4], minNoches: 3 }, baja: { minNoches: 2 } },
