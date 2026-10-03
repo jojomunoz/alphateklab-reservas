@@ -206,6 +206,8 @@ a { color: var(--primario-texto); text-underline-offset: 0.18em; text-decoration
 img, svg { display: block; max-width: 100%; }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+/* Los campos de fecha enfocan un segmento interno y Chrome no les aplica :focus-visible: el anillo va por :focus. */
+:is(input:not([type=radio], [type=checkbox]), select, textarea):focus { outline: 2px solid var(--foco); outline-offset: 2px; }
 /* Los contenedores que reciben el foco por programa (al cambiar de pestaña o tras «Saltar al contenido») no son controles: sin anillo. */
 main[tabindex="-1"]:focus, .resultado[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, [data-errores][tabindex="-1"]:focus { outline: none; }
 [hidden] { display: none !important; }

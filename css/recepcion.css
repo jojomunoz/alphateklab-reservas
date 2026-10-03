@@ -230,3 +230,9 @@
   .herramientas__titulo { width: 100%; order: -1; }
 }
 .regla .etiqueta { font-weight: 600; font-size: 0.875rem; color: var(--tinta-2); margin-bottom: 4px; }
+
+/* En el teléfono (o con dedo) todo lo que se toca mide 44 px o más; en escritorio se queda denso. */
+@media (max-width: 899px), (pointer: coarse) {
+  .fila-recepcion .acciones .boton, .linea-envios .acciones .boton, .envio .acciones .boton, .variables button { min-height: 44px; }
+  .fila-recepcion__quien, .persona__nombre { min-height: 44px; display: inline-flex; align-items: center; }
+}
