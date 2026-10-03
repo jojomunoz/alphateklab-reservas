@@ -1,6 +1,6 @@
 // Recorrido completo con Playwright, con clics reales. Comprueba lo que pide la especificación («Hecho = verificado»)
-// y termina con un resumen de lo que pasó y lo que falló. Requiere el servidor en el puerto 4710:
-//   python3 -m http.server 4710 -d ~/alphateklab/repos
+// y termina con un resumen de lo que pasó y lo que falló. Requiere el servidor en el puerto 4730 (o el de la variable PUERTO):
+//   python3 -m http.server 4730 -d ~/alphateklab/repos (o PUERTO=<otro>)
 // Uso: node herramientas/recorrido.mjs [--sin-relevo] [--sin-capturas]
 import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
 // El «otro dispositivo» es un segundo proceso de Chromium, con su propio perfil y sin almacenamiento compartido.
@@ -9,7 +9,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { fechaISO, sumarDias, diaSemana } from '../js/nucleo/tiempo.mjs';
 import { feriado } from '../js/nucleo/feriados.mjs';
 
-const BASE = 'http://localhost:4710/alphateklab-reservas/';
+const BASE = `http://localhost:${process.env.PUERTO || 4730}/alphateklab-reservas/`;
 const CAP = new URL('../capturas/', import.meta.url).pathname;
 mkdirSync(CAP, { recursive: true });
 const args = process.argv.slice(2);
@@ -146,9 +146,11 @@ try {
   comprobar('segunda cita creada', !!citaB);
   await p.goto(BASE + 'bandeja.html');
   let tarea = null;
-  for (let i = 0; i < 8 && !tarea; i++) {
-    await p.click('[data-avanzar="86400000"]');
-    await p.waitForTimeout(150);
+  // De envío en envío (no de día en día): la tarea de llamar se cierra sola cuando empieza la cita, así que se mira
+  // justo después de que aparece.
+  for (let i = 0; i < 40 && !tarea; i++) {
+    await p.click('[data-proximo]');
+    await p.waitForTimeout(100);
     const e = await estadoDe(p);
     tarea = e.negocios.consultorio.tareas.find((t) => t.citaId === citaB.id && !t.hecha);
   }
@@ -189,7 +191,7 @@ try {
   await p.click('[data-simular-ota="booking"]');
   await p.waitForSelector('.choque');
   const choque = await p.textContent('#choques');
-  comprobar('aparece el choque con su propuesta de reubicación', /Propuesta:/.test(choque) && /(Mover a|contactar)/i.test(choque));
+  comprobar('aparece el choque con su propuesta de reubicación', /Propuesta:/.test(choque) && /(Mover (la|el) .+ a |contactar)/i.test(choque));
   if (conCapturas) await p.screenshot({ path: CAP + 'recorrido-alojamiento-alerta-1280.png' });
   // Aplicar la propuesta resuelve el choque.
   if (await p.locator('.propuesta [data-mover-res]').count()) {
@@ -249,10 +251,15 @@ try {
     await p.goto(BASE + 'bandeja.html');
     await p.waitForSelector('.relevo-estado[data-estado="conectado"]', { timeout: 15000 }).catch(() => {});
     const conectado = await p.getAttribute('.relevo-estado', 'data-estado');
-    estado = await estadoDe(p);
-    const st = estado.negocios.consultorio;
-    const env = st.envios.filter((e) => e.estado === 'enviado' && e.citaId).map((e) => ({ e, c: st.citas.find((c) => c.id === e.citaId) }))
-      .find(({ c }) => c && ['pendiente', 'reprogramada'].includes(c.estado) && c.inicio > estado.reloj.ahora);
+    const pendienteConEnlace = async () => {
+      estado = await estadoDe(p);
+      const st = estado.negocios.consultorio;
+      return st.envios.filter((e) => e.estado === 'enviado' && e.citaId && e.enlace).map((e) => ({ e, c: st.citas.find((c) => c.id === e.citaId) }))
+        .find(({ c }) => c && ['pendiente', 'reprogramada'].includes(c.estado) && c.inicio > estado.reloj.ahora + 3600e3);
+    };
+    // Si con los datos de ejemplo todavía no salió ningún recordatorio de una cita pendiente, se adelanta el reloj.
+    let env = await pendienteConEnlace();
+    for (let i = 0; i < 6 && !env; i++) { await p.click('[data-proximo]'); await p.waitForTimeout(120); env = await pendienteConEnlace(); }
     if (!env) comprobar('relevo: hay una cita pendiente con enlace enviado para probar', false);
     else {
       const ctxW = await navW.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'es-PA' });
@@ -261,15 +268,18 @@ try {
       const t0 = Date.now();
       await telW.goto(env.e.enlace);
       await telW.click('[data-r="confirmo"]');
-      await telW.waitForSelector('.entrega[data-estado="ok"], .entrega[data-estado="error"]', { timeout: 15000 });
-      const entrega = await telW.getAttribute('.entrega', 'data-estado');
+      // «ok» = llegó el acuse de la recepción; «error» = no se pudo publicar. Si se publicó pero no hubo acuse (ntfy
+      // limita las conexiones), queda «enviando».
+      const entrega = await telW.waitForSelector('.entrega[data-estado="ok"], .entrega[data-estado="error"]', { timeout: 30000 })
+        .then(() => telW.getAttribute('.entrega', 'data-estado')).catch(() => 'enviando, sin acuse');
       let llego = false;
       for (let i = 0; i < 40 && !llego; i++) {
         await esperar(250);
         const e2 = await estadoDe(p);
         llego = e2.negocios.consultorio.citas.find((c) => c.id === env.c.id)?.estado === 'confirmada';
       }
-      comprobar(`relevo ntfy entre dos navegadores separados (escucha: ${conectado}, publicación: ${entrega})`, llego, llego ? `llegó en ${((Date.now() - t0) / 1000).toFixed(1)} s` : 'no llegó');
+      comprobar(`relevo ntfy entre dos navegadores separados (escucha: ${conectado}, teléfono: ${entrega})`, llego, llego ? `llegó en ${((Date.now() - t0) / 1000).toFixed(1)} s` : 'no llegó');
+      if (llego) comprobar('el teléfono recibe el acuse de la recepción y lo muestra', entrega === 'ok' && /quedó confirmada/.test(await telW.textContent('.resultado__titulo')), entrega);
       if (conCapturas) await telW.screenshot({ path: CAP + 'recorrido-relevo-otro-navegador-390.png', fullPage: true });
       await ctxW.close();
     }

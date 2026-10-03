@@ -1,14 +1,14 @@
 // Segundo recorrido con Playwright: lo que el primero no toca. Autoagenda del paciente, cambiar la cita desde el
 // enlace, cancelar y que el hueco se ofrezca a la lista de espera (el primero que acepta se lo queda), reprogramar
 // desde recepción con validación, vocabulario de otra plantilla, reserva de grupo con solape rechazado y reserva
-// directa del huésped con ITBMS y seña. Requiere el servidor en el puerto 4710.
+// directa del huésped con ITBMS y seña. Requiere el servidor en el puerto 4730 (o el de la variable PUERTO).
 // Uso: node herramientas/recorrido-extra.mjs
 import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
 import { mkdirSync } from 'node:fs';
 import { fechaISO, sumarDias, diaSemana } from '../js/nucleo/tiempo.mjs';
 import { feriado } from '../js/nucleo/feriados.mjs';
 
-const BASE = 'http://localhost:4710/alphateklab-reservas/';
+const BASE = `http://localhost:${process.env.PUERTO || 4730}/alphateklab-reservas/`;
 const CAP = new URL('../capturas/', import.meta.url).pathname;
 mkdirSync(CAP, { recursive: true });
 const resultados = [];
@@ -100,7 +100,8 @@ try {
   e = await estadoDe(p);
   const movida = e.negocios.consultorio.citas.find((c) => c.id === citaCambio.id);
   comprobar('cambiar: la cita queda en el horario elegido', /Cambiamos/.test(tituloCambio) && movida.inicio === nuevoMin * 60000, `${tituloCambio.trim()}`);
-  const viejosEnCola = e.negocios.consultorio.envios.filter((v) => v.citaId === citaCambio.id && v.estado === 'programado');
+  // Ya no le llegan reintentos: solo el aviso de la hora nueva (la eligió la persona).
+  const viejosEnCola = e.negocios.consultorio.envios.filter((v) => v.citaId === citaCambio.id && v.estado === 'programado' && v.clase !== 'aviso');
   comprobar('cambiar: queda confirmada y no le siguen llegando reintentos', movida.estado === 'confirmada' && viejosEnCola.length === 0, `${movida.estado}, ${viejosEnCola.length} en cola`);
 
   // ── 3. «No podré ir» → el hueco se ofrece a la lista de espera → el primero que acepta se lo queda ──
@@ -198,6 +199,30 @@ try {
   const marca = await p.textContent('#marca');
   comprobar('plantilla barbería: cambia la marca y el vocabulario, no la estructura', /Barber/i.test(marca) && /Clientes/.test(textoBarberia) && /Por silla/.test(textoBarberia) && (await p.locator('.agenda').count()) === 1, marca.trim().slice(0, 60));
   await p.screenshot({ path: CAP + 'extra-plantilla-barberia-1280.png' });
+  // Ningún texto del consultorio se cuela en la barbería: ni en la recepción, ni en la bandeja, ni en el enlace del cliente.
+  const fuga = /paciente|consultorio|clínica/i;
+  const textos = [];
+  for (const pestana of ['agenda', 'pacientes', 'espera', 'riesgo']) {
+    await p.goto(BASE + `citas.html#${pestana}`);
+    await p.waitForTimeout(250);
+    textos.push([`citas #${pestana}`, (await p.textContent('#marca')) + (await p.textContent('main'))]);
+  }
+  await p.goto(BASE + 'bandeja.html');
+  await p.waitForTimeout(250);
+  textos.push(['bandeja', await p.textContent('main')]);
+  const eb = await estadoDe(p);
+  const enlaceBarberia = eb.negocios.barberia.envios.find((v) => v.estado === 'enviado' && v.enlace)?.enlace;
+  if (enlaceBarberia) {
+    await tel.goto(enlaceBarberia);
+    await tel.waitForSelector('.tarjeta-cita');
+    textos.push(['enlace del cliente', await tel.textContent('main')]);
+    await tel.goto(BASE + 'confirmar.html#' + 'x'.repeat(30));
+    await tel.waitForSelector('.error-enlace');
+    textos.push(['enlace roto', await tel.textContent('main')]);
+  }
+  const con = textos.filter(([, t]) => fuga.test(t)).map(([d, t]) => `${d}: «${t.match(new RegExp(`.{0,40}${fuga.source}.{0,20}`, 'i'))[0].trim()}»`);
+  comprobar('plantilla barbería: ningún texto dice paciente, consultorio ni clínica', con.length === 0, con.slice(0, 3).join(' | '));
+  await p.goto(BASE + 'citas.html');
   await sel.selectOption('consultorio').catch(async () => { await p.click('.barra-demo__menu'); await sel.selectOption('consultorio'); });
 
   // ── 6. Alojamiento: reserva de grupo (3 cabañas) y solape rechazado ──

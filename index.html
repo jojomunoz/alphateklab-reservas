@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>alphateklab Reservas · citas con recordatorio y cabañas sin doble reserva</title>
-<meta name="description" content="Agenda de citas con recordatorios que insisten hasta tener respuesta, y calendario de cabañas conectado a Booking, Airbnb y Expedia con vigilante de sincronización. Demo con negocios de ejemplo.">
+<meta name="description" content="Agenda de citas con recordatorios que insisten hasta tener respuesta, y calendario de cabañas que importa y exporta el iCal de Booking, Airbnb y Expedia, con vigilante de sincronización. Demo con negocios de ejemplo.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:title" content="alphateklab Reservas">
 <meta property="og:description" content="Citas con recordatorio por WhatsApp y cabañas sin doble reserva. Demo con negocios de ejemplo.">
@@ -23,7 +23,7 @@
 
   <header class="inicio__cabeza">
     <h1>Agenda de citas con recordatorios, y calendario de cabañas que se cruza con Booking y Airbnb por iCal</h1>
-    <p class="inicio__entrada">Un mismo motor con dos plantillas. Esta demo usa negocios de ejemplo: un consultorio de dermatología en Ciudad de Panamá y unas cabañas en las tierras altas de Chiriquí. Lo que hagas aquí se guarda solo en tu navegador.</p>
+    <p class="inicio__entrada">Un mismo motor con dos plantillas. Esta demo usa negocios de ejemplo: un consultorio de dermatología en Ciudad de Panamá y unas cabañas en las tierras altas de Chiriquí. Lo que hagas aquí se guarda en tu navegador; solo si respondes desde otro teléfono, la respuesta pasa por un servidor público de pruebas (ntfy.sh).</p>
   </header>
 
   <div class="plantillas">
@@ -31,7 +31,7 @@
       <p class="plantilla__marca"><span>Dermatología Ríos</span> consultorio de ejemplo</p>
       <h2 id="t-citas">Citas: que el paciente confirme sin que nadie lo persiga por teléfono</h2>
       <p class="plantilla__caso">El pedido, tal cual: una clínica de dermatología quería marcar en cada cita «recuérdale 2 días antes, o 1 día antes», que el paciente confirme con un toque y que, si no responde, se le vuelva a escribir hasta que diga si viene o no.</p>
-      <p class="plantilla__dato">En la Policlínica Generoso Guardia de la CSS faltó el 30 % de los pacientes de dermatología (<a href="https://www.tvn-2.com/nacionales/funciona-sistema-citas-policlinicas-concurridas-san-migueltito_1_2239674.html" rel="noopener">TVN, 6 de mayo de 2026</a>).</p>
+      <p class="plantilla__dato">En la Policlínica Generoso Guardia de la CSS, la inasistencia en dermatología llega al 30 % (<a href="https://www.tvn-2.com/nacionales/funciona-sistema-citas-policlinicas-concurridas-san-migueltito_1_2239674.html" rel="noopener">TVN, 6 de mayo de 2026</a>).</p>
       <ul class="plantilla__trae">
         <li>Agenda por profesional y por consultorio, sin citas encimadas ni en feriados.</li>
         <li>Recordatorio 2 días o 1 día antes, con reintentos y paso a SMS si no contesta.</li>
@@ -72,14 +72,14 @@
     <h2 id="t-como">Cómo funciona el recordatorio</h2>
     <ol class="como__pasos">
       <li><strong>La recepción agenda y marca la regla.</strong> 2 días antes, 1 día antes o las dos; la hora (por ejemplo, 9:00 a. m.) y el canal.</li>
-      <li><strong>A esa hora sale el mensaje, sin datos clínicos.</strong> «Tu cita en Dermatología Ríos el martes 6 a las 9:30 a. m.», con un enlace. La vista previa de WhatsApp se ve con el teléfono bloqueado.</li>
+      <li><strong>A esa hora sale el mensaje, sin datos clínicos.</strong> Dice el negocio, el día, la hora y el profesional, y trae un enlace; no dice el servicio, porque la vista previa de WhatsApp se ve con el teléfono bloqueado.</li>
       <li><strong>El paciente responde con un toque.</strong> Confirmo, necesito cambiarla (elige entre tres horarios libres) o no podré ir. La agenda cambia sola y los mensajes pendientes se detienen.</li>
       <li><strong>Si no responde, se le vuelve a escribir.</strong> Cada pocas horas, solo de 8:00 a. m. a 8:00 p. m. y nunca en la última hora antes de la cita, hasta el máximo que marcaste. El último puede ir por SMS.</li>
-      <li><strong>Si se agotan, la recepción llama.</strong> Aparece «Llamar al paciente» en la lista del día.</li>
+      <li><strong>Si se agotan, la recepción llama.</strong> Aparece «Llamar al paciente» en la lista del día, a una hora en que el consultorio está abierto.</li>
       <li><strong>Si cancela, el horario no se pierde.</strong> Se ofrece por WhatsApp a quienes esperan ese servicio; el primero que acepta se lo queda.</li>
     </ol>
     <figure class="ejemplo-plan">
-      <figcaption>Ejemplo: cita el jueves 8 de octubre a las 10:00 a. m., agendada el lunes. Regla: 2 días y 1 día antes a las 9:00 a. m., insistir cada 4 horas, máximo 4 mensajes, el último por SMS. Es la salida real del planificador (está en sus pruebas).</figcaption>
+      <figcaption>Ejemplo: cita el jueves 8 de octubre a las 10:00 a. m., agendada el lunes 5 a las 10:00 a. m. Regla: 2 días y 1 día antes a las 9:00 a. m., insistir cada 4 horas, máximo 4 mensajes, el último por SMS. Es la salida real del planificador: una prueba la compara con esta lista.</figcaption>
       <ol class="ejemplo-plan__linea">
         <li><time>mar 6, 9:00 a. m.</time><span>WhatsApp · 2 días antes</span></li>
         <li><time>mar 6, 1:00 p. m.</time><span>WhatsApp · reintento</span></li>
@@ -89,30 +89,30 @@
         <li class="ejemplo-plan__llamar"><time>mié 7, 1:00 p. m.</time><span>Llamar al paciente</span></li>
       </ol>
     </figure>
-    <p class="como__evidencia">Por qué insistir: en un metaanálisis de 21 ensayos con 16,076 pacientes, quienes recibieron notificaciones digitales faltaron un 25 % menos (15 % frente a 21 %), y varias notificaciones subieron la asistencia un 25 %, contra un 6 % con una sola (<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC5093388/" rel="noopener">Robotham y otros, BMJ Open, 2016</a>).</p>
+    <p class="como__evidencia">Por qué insistir: en un metaanálisis de 21 ensayos con 16,076 pacientes, quienes recibieron notificaciones digitales faltaron un 25 % menos (15 % frente a 21 %), y varias notificaciones subieron la asistencia 25 puntos porcentuales, contra 6 con una sola (<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC5093388/" rel="noopener">Robotham y otros, BMJ Open, 2016</a>).</p>
   </section>
 
   <div class="dos-columnas">
     <section aria-labelledby="t-simulado">
       <h2 id="t-simulado">Qué es simulado en esta demo</h2>
       <ul class="lista-llana">
-        <li><strong>El reloj.</strong> Se adelanta con botones para ver en minutos lo que pasa en dos días.</li>
-        <li><strong>El envío.</strong> No sale ningún mensaje solo. Cada uno tiene «Abrir en WhatsApp», que abre tu WhatsApp con el texto listo para mandarlo a mano.</li>
-        <li><strong>Entre dispositivos.</strong> Si confirmas desde tu teléfono, la respuesta viaja por ntfy.sh, un servidor público de pruebas. No escribas datos reales.</li>
-        <li><strong>Booking, Airbnb y Expedia.</strong> No hay conexión real: el calendario se importa subiendo el .ics o pegándolo, y dos botones simulan la caída de Booking y la reserva que entra mientras tanto.</li>
-        <li><strong>La seña por Yappy.</strong> El QR y el directorio son de ejemplo y no cobran.</li>
-        <li><strong>Los datos.</strong> Viven en tu navegador. «Restablecer datos de ejemplo», arriba, vuelve al principio.</li>
+        <li>El reloj se adelanta con botones, para ver en minutos lo que pasa en dos días.</li>
+        <li>Ningún mensaje sale solo. Cada uno tiene un botón que abre tu WhatsApp (o el SMS o el correo, según el canal) con el texto listo para mandarlo a mano.</li>
+        <li>Si respondes desde otro teléfono, la respuesta viaja por ntfy.sh, un servidor público de pruebas, y la pantalla de recepción la recibe ahí. No escribas datos reales.</li>
+        <li>No hay conexión real con Booking, Airbnb ni Expedia: el calendario se importa subiendo el .ics o pegándolo, y dos botones simulan la caída de Booking y la reserva que entra mientras tanto.</li>
+        <li>El QR y el directorio de Yappy son de ejemplo y no cobran.</li>
+        <li>Los datos viven en tu navegador. «Restablecer datos de ejemplo», arriba, vuelve al principio.</li>
       </ul>
     </section>
     <section aria-labelledby="t-produccion">
       <h2 id="t-produccion">El camino a producción</h2>
       <ul class="lista-llana">
-        <li><strong>Un servidor con la cola de envíos.</strong> PocketBase en un servidor propio (o Supabase) con una tarea cada 5 a 15 minutos: manda los recordatorios a su hora aunque nadie tenga la página abierta.</li>
-        <li><strong>WhatsApp Business API</strong> con una plantilla de utilidad aprobada por Meta y botones de respuesta. Meta cobra por mensaje entregado: para Panamá, unos US$0.011 a 0.013 según tablas de terceros, a confirmar en la <a href="https://developers.facebook.com/docs/whatsapp/pricing" rel="noopener">tabla oficial</a>. Ese costo va aparte de la suscripción.</li>
-        <li><strong>Correo de respaldo</strong>, casi gratis; el SMS (US$0.10 a 0.18 por segmento a Panamá) solo como último intento.</li>
-        <li><strong>Los iCal, leídos desde el servidor</strong> cada 15 a 30 minutos: desde el navegador no se puede (CORS). Para eliminar la doble reserva del todo, un channel manager conectado por API.</li>
-        <li><strong>La seña</strong>, con un enlace de pago de Tilopay que acepta Yappy, o con el botón de pago de Yappy y un servidor que reciba el aviso del banco.</li>
-        <li><strong>Los datos personales</strong> bajo la Ley 81 de 2019 y el Decreto Ejecutivo 285 de 2021 (supervisa la ANTAI). Los de salud son sensibles: consentimiento expreso, trazable y revocable. GitHub Pages es solo para esta demo.</li>
+        <li>Los recordatorios los manda un servidor con la cola de envíos (PocketBase en un servidor propio, o Supabase) con una tarea cada 5 a 15 minutos, aunque nadie tenga la página abierta.</li>
+        <li>Salen por WhatsApp Business API, con una plantilla de utilidad aprobada por Meta y botones de respuesta. Meta cobra por mensaje entregado: para Panamá, unos US$0.011 a 0.013 según tablas de terceros, a confirmar en la <a href="https://developers.facebook.com/docs/whatsapp/pricing" rel="noopener">tabla oficial</a>. Ese costo va aparte de la suscripción.</li>
+        <li>El correo sirve de respaldo y casi no cuesta; el SMS (US$0.10 a 0.18 por segmento a Panamá) queda para el último intento.</li>
+        <li>El servidor lee los iCal cada 15 a 30 minutos, porque desde el navegador no se puede (CORS). Para eliminar la doble reserva del todo hace falta un channel manager conectado por API.</li>
+        <li>La seña se cobra con un enlace de pago de Tilopay que acepta Yappy, o con el botón de pago de Yappy y un servidor que reciba el aviso del banco.</li>
+        <li>Los datos personales siguen la Ley 81 de 2019 y el Decreto Ejecutivo 285 de 2021 (supervisa la ANTAI). Los de salud son sensibles: consentimiento expreso, trazable y revocable. GitHub Pages es solo para esta demo.</li>
       </ul>
       <p class="precio">Precio para tu negocio: a cotizar.</p>
     </section>
@@ -120,7 +120,7 @@
 </main>
 <footer class="pie">
   <div class="pie__dentro">
-    <p>Hecho por <a href="https://jojomunoz.github.io/alphateklab/">alphateklab</a>, en Panamá. Hacemos páginas web, tiendas en línea, apps, software a medida, automatizaciones y agentes de WhatsApp, y además lo instalamos en tu local.</p>
+    <p>Hecho por <a href="https://jojomunoz.github.io/alphateklab/">alphateklab</a>, en Panamá. Hacemos páginas web, tiendas en línea, apps, software a medida, automatizaciones y agentes de WhatsApp, y además instalamos en tu local cámaras, sensores y pantallas.</p>
     <p>Los negocios, las personas y las reservas de esta demo son de ejemplo. Los teléfonos usan el prefijo ficticio +507 6000-0xxx.</p>
   </div>
 </footer>

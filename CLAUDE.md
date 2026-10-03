@@ -6,8 +6,17 @@ especificación: `~/alphateklab/ESPEC-reservas.md`; guía de diseño: `~/Documen
 
 - Lógica pura en `js/nucleo/` (sin DOM), pruebas en `pruebas/` con `node --test pruebas/` (en Node 22 entra por
   `pruebas/index.js`). Interfaz en `js/app/`. Herramientas de QA en `herramientas/` (capturas, contraste, recorrido,
-  mutaciones). Servir con `python3 -m http.server 4710 -d ~/alphateklab/repos` y abrir `/alphateklab-reservas/`.
+  mutaciones, relevo simulado). Servir con `python3 -m http.server 4730 -d ~/alphateklab/repos` y abrir
+  `/alphateklab-reservas/` (las herramientas leen el puerto de `PUERTO`, 4730 por defecto).
 - Toda fecha pasa por `js/nucleo/tiempo.mjs` (Panamá, UTC-5 fijo). Nunca `new Date().getHours()`.
+- `horaTexto()` termina en «m.» («9:30 a. m.»): ese punto cierra la frase. Nunca escribir `${horaTexto(x)}.` (una prueba
+  busca «m..» en la bitácora, las tareas y los mensajes). Para listas de recepción, `diaRelativo()` («hoy», «mañana»,
+  «ayer» o la fecha), nunca un «mañana» calculado a mano.
+- El teléfono del paciente no da nada por hecho si la agenda está en otro dispositivo: espera el acuse de la
+  recepción (`acuseDe` y `esAcuseDe` en `js/nucleo/mensajes-relevo.mjs`). Con la agenda en el mismo navegador no se
+  publica nada en ntfy.
+- La página pública (autoagenda) nunca dice de quién es una cédula ni si está registrada; valida todo antes de
+  escribir (si la hora no sirve, no queda nadie registrado ni una línea en la bitácora).
 - Datos de ejemplo: nombres comunes combinados, teléfonos `+507 6000-0xxx`, cédulas con tomo `000`, correos en
   `example.com`. Nada de los chats ni de Konsenda.
 

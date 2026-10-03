@@ -1,15 +1,15 @@
-// Capturas de cada vista (y de las pestañas de recepción) a 390 y 1280, en claro y oscuro (40 combinaciones), con el ancho del cuerpo (sin scroll
-// horizontal) y los errores de consola de cada una. Requiere el servidor en el puerto 4710.
+// Capturas de cada vista (y de las pestañas de recepción) a 320, 360, 390 y 1280, en claro y oscuro (80 combinaciones), con el ancho del cuerpo (sin scroll
+// horizontal) y los errores de consola de cada una. Requiere el servidor en el puerto 4730 (o el de la variable PUERTO).
 // Uso: node herramientas/capturas.mjs [--completa]
 import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
 import { mkdirSync } from 'node:fs';
 
-const BASE = 'http://localhost:4710/alphateklab-reservas/';
+const BASE = `http://localhost:${process.env.PUERTO || 4730}/alphateklab-reservas/`;
 const DIR = new URL('../capturas/matriz/', import.meta.url).pathname;
 mkdirSync(DIR, { recursive: true });
 const completa = process.argv.includes('--completa');
 const VISTAS = ['index.html', 'citas.html', 'citas.html#pacientes', 'citas.html#espera', 'citas.html#riesgo', 'bandeja.html', 'confirmar.html', 'reservar.html', 'alojamiento.html', 'alojamiento-reservar.html'];
-const TAMANOS = [[390, 844], [1280, 800]];
+const TAMANOS = [[320, 640], [360, 720], [390, 844], [1280, 800]];
 const filas = [];
 let ntfy429 = 0;
 const nav = await chromium.launch();

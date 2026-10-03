@@ -1,6 +1,6 @@
 // Abre una vista con Playwright, guarda una captura y lista los errores de consola y el ancho del cuerpo.
 // Uso: node herramientas/mirar.mjs <pagina> [ancho] [alto] [claro|oscuro] [nombre] [--completa] [--js "código"]
-// Requiere el servidor: python3 -m http.server 4710 -d ~/alphateklab/repos
+// Requiere el servidor: python3 -m http.server 4730 -d ~/alphateklab/repos (o PUERTO=<otro>)
 import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
 import { mkdirSync } from 'node:fs';
 
@@ -10,7 +10,7 @@ const iJs = args.indexOf('--js');
 const js = iJs >= 0 ? args[iJs + 1] : null;
 const pos = args.filter((a, i) => !a.startsWith('--') && (iJs < 0 || i !== iJs + 1));
 const [pagina = 'index.html', ancho = '1280', alto = '800', tema = 'claro', nombre] = pos;
-const base = 'http://localhost:4710/alphateklab-reservas/';
+const base = `http://localhost:${process.env.PUERTO || 4730}/alphateklab-reservas/`;
 mkdirSync(new URL('../capturas/', import.meta.url), { recursive: true });
 
 const nav = await chromium.launch();

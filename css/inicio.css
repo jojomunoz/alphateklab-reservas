@@ -57,3 +57,6 @@
 .lista-llana { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; color: var(--tinta-2); }
 .lista-llana strong { color: var(--tinta); }
 .precio { margin-top: 18px; font-weight: 700; }
+
+/* El pie, alineado con el contenido de la portada (no con el ancho de las vistas de trabajo). */
+.pie .pie__dentro { max-width: 1180px; }

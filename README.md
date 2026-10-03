@@ -12,15 +12,16 @@ Un motor de citas y reservas con dos plantillas, para negocios de Panamá:
 Esto es una **demo** en GitHub Pages con negocios de ejemplo (Dermatología Ríos, Barbería Calle Cuarta, Taller La
 Rotonda y Cabañas Quebrada Honda). Ninguno existe; ningún nombre, teléfono ni cédula es real.
 
-Demo publicada: https://jojomunoz.github.io/alphateklab-reservas/
+Dirección prevista en GitHub Pages: https://jojomunoz.github.io/alphateklab-reservas/ (todavía no está publicada: el repo
+no tiene remoto y esa dirección responde 404).
 
 ## Las vistas
 
 | Archivo | Para quién | Qué hace |
 |---|---|---|
 | `index.html` | Dueño que evalúa | Qué resuelve cada plantilla, cómo funciona el recordatorio, qué es simulado y el camino a producción. |
-| `citas.html` | Recepción | Agenda día y semana por profesional o por sala, huecos libres, agendar y reprogramar con horas válidas, ficha del paciente, «hoy en recepción» (sin confirmar, por llamar, en sala), lista de espera y riesgo. |
-| `bandeja.html` | Recepción | La cola de mensajes y el reloj de la demo (+1 h, +6 h, +1 día, hasta el próximo envío), lo enviado con «Abrir en WhatsApp» y «Ver como paciente», lo que se detuvo y por qué, y las plantillas de mensaje. |
+| `citas.html` | Recepción | Agenda día y semana por profesional o por sala, huecos libres, agendar y reprogramar con horas válidas (sin pisar otra cita de la misma persona), ficha del paciente, «en recepción» (sin confirmar hoy y mañana, por llamar, en sala), lista de espera, riesgo y ajustes de la agenda (minutos entre citas y autoconfirmación). |
+| `bandeja.html` | Recepción | La cola de mensajes y el reloj de la demo (+1 h, +6 h, +1 día, hasta el próximo envío), lo enviado con el botón de su canal («Abrir en WhatsApp», en SMS o en el correo) y «Ver como paciente», lo que se detuvo y por qué, y las plantillas de mensaje. |
 | `confirmar.html#…` | Paciente | Confirmar, cambiar (3 horarios libres o «llámenme») o avisar que no irá. Descarga el `.ics`. También sirve para aceptar un espacio de la lista de espera. |
 | `reservar.html` | Paciente | Autoagenda: servicio → profesional → día → hora → datos y consentimiento. |
 | `alojamiento.html` | Dueño o recepción | Calendario de cabañas por canal, reservas, choques, `#canales` (importar y exportar iCal, vigilante) y el simulador de la doble reserva. |
@@ -48,9 +49,13 @@ Demo publicada: https://jojomunoz.github.io/alphateklab-reservas/
 - **El envío.** No sale ningún mensaje automático. «Abrir en WhatsApp» abre `https://wa.me/<número>?text=<mensaje>`
   y lo mandas a mano desde el WhatsApp del negocio. Nada de librerías no oficiales: violan los términos de WhatsApp
   y el número puede quedar bloqueado.
-- **Entre dispositivos.** Las respuestas viajan por `https://ntfy.sh` (servidor público de pruebas) en el tema
-  `atk-reservas-<sala>`. Solo viajan identificadores y la respuesta; la solicitud de cita desde otro teléfono
-  (`reservar.html#s=<sala>`) lleva lo que la persona escribe. Por eso el aviso: no escribas datos reales.
+- **Entre dispositivos.** Solo cuando la agenda está en otro dispositivo, las respuestas viajan por `https://ntfy.sh`
+  (servidor público de pruebas) en el tema `atk-reservas-<sala>`; con la agenda en el mismo navegador se aplican ahí
+  y no sale nada. Viajan identificadores y la respuesta; la solicitud de cita desde otro teléfono
+  (`reservar.html#s=<sala>`) lleva lo que la persona escribe. Por eso el aviso: no escribas datos reales. La pantalla
+  de recepción contesta cada mensaje con un acuse (el resultado real: confirmada, horario ocupado, solicitud
+  rechazada y por qué) y el teléfono no da nada por hecho hasta que le llega: valida contra su propia copia de la
+  demo, que puede tener otro reloj y otras citas. Si la recepción no contesta en 20 s, el teléfono lo dice.
 - **Los datos de la cita en el enlace** van en el fragmento `#` (base64url de un JSON corto): el navegador no lo
   manda a ningún servidor. En producción el enlace lleva un identificador aleatorio de un solo uso.
 - **Los canales del alojamiento.** No hay conexión con Airbnb, Booking ni Expedia. Los calendarios se importan
@@ -97,6 +102,14 @@ GitHub Pages es solo para la demo (su política no permite alojar un SaaS comerc
   (`pruebas/fixtures/`, con sus fuentes en `pruebas/fixtures/LEEME.md`) y contra las formas del RFC 5545 (Z, TZID,
   plegado, escapado, CANCELLED, DURATION).
 - **Hora de Panamá propia** (`js/nucleo/tiempo.mjs`, UTC-5 fijo): las pruebas pasan igual con `TZ=Asia/Tokyo`.
+- **Recordatorios.** Una cita pendiente recibe la secuencia completa (recordatorios, reintentos y, si se agotan, la
+  tarea de llamar, que cae con el negocio abierto); una cita que nace confirmada (autoconfirmación, lista de espera o
+  cambio hecho por la persona) recibe solo un aviso a la hora del recordatorio más cercano. Los mensajes salen de
+  8:00 a. m. a 8:00 p. m. cualquier día, también los que el negocio cierra. Cambiar la regla a mitad de camino no
+  reinicia el conteo: lo ya enviado cuenta para el máximo.
+- **Reservas de canal reubicadas.** Cada reserva que llega por iCal recuerda de qué calendario vino: si se mueve a
+  otra cabaña, la siguiente importación de su calendario no la pierde ni la duplica, y la cabaña nueva la exporta a
+  los demás canales (no es eco: el canal la tiene en otra cabaña).
 - **Feriados 2026** calculados por regla (fijos + Carnaval y Viernes Santo según la Pascua + traslado de domingo a
   lunes) y comprobados contra la lista oficial publicada (La Estrella y La Prensa).
 - **ITBMS de hospedaje: 10 %** (DGI, https://dgi.mef.gob.pa/itbms/Generalidades).
@@ -107,23 +120,25 @@ GitHub Pages es solo para la demo (su política no permite alojar un SaaS comerc
 ```sh
 node --test pruebas/                       # lógica pura (en Node 22 entra por pruebas/index.js)
 node herramientas/contraste.mjs            # contraste de los tokens de las 4 marcas, claro y oscuro
-python3 -m http.server 4710 -d ~/alphateklab/repos &   # servir como en GitHub Pages
-node herramientas/recorrido.mjs            # recorrido principal con Playwright (29 comprobaciones, incluye el relevo ntfy)
+python3 -m http.server 4730 -d ~/alphateklab/repos &   # servir como en GitHub Pages (otro puerto: PUERTO=<n>)
+node herramientas/recorrido.mjs            # recorrido principal con Playwright (30 comprobaciones, incluye el relevo ntfy real)
 node herramientas/recorrido-extra.mjs      # autoagenda, cambiar, lista de espera, reprogramar, plantillas, grupo, huésped
-node herramientas/capturas.mjs --completa  # 7 vistas × 390/1280 × claro/oscuro, con desborde y consola
-node herramientas/mutaciones.mjs           # rompe el código a propósito y comprueba que las pruebas fallan
+node herramientas/relevo-simulado.mjs      # ida y vuelta del relevo entre dos navegadores con un ntfy en memoria (14)
+node herramientas/capturas.mjs --completa  # 10 vistas o pestañas × 320/360/390/1280 × claro/oscuro (80), con desborde y consola
+node herramientas/mutaciones.mjs           # rompe el código a propósito (61 reglas) y comprueba que las pruebas fallan
 ```
 
 ## Lo que no se probó
 
 - **Safari ni WebKit.** Playwright no arranca WebKit en la máquina de desarrollo (Fedora 44: faltan `libicu74` y
   `libjpeg-turbo8`). Todo lo verificado es Chromium.
-- **Un teléfono real.** Los recorridos usan un Chromium con pantalla de 390 px y toque emulado.
+- **Un teléfono real.** Los recorridos usan un Chromium con pantalla de 320 a 390 px y toque emulado.
 - **Lector de pantalla.** Hay etiquetas, regiones vivas y orden de foco probados con teclado, pero no se pasó con
   NVDA, VoiceOver ni TalkBack.
-- **El relevo ntfy.sh depende de un servidor público.** Funcionó entre dos procesos de Chromium separados (1,4 s), pero
-  ntfy.sh limita las conexiones por IP (responde 429) si se abren muchas seguidas; entonces la demo dice «sin
-  conexión» y sigue en el mismo dispositivo.
+- **El relevo ntfy.sh depende de un servidor público.** Funcionó entre dos procesos de Chromium separados, ida y vuelta
+  con el acuse (1.4 s, 3-oct-2026), pero ntfy.sh limita las conexiones por IP (responde 429) si se abren muchas
+  seguidas; entonces la demo dice «sin conexión» y sigue en el mismo dispositivo, y el teléfono dice que la recepción
+  no ha contestado. La lógica del ida y vuelta se prueba sin depender de él en `herramientas/relevo-simulado.mjs`.
 - **Envío real de WhatsApp, SMS o correo.** No hay servidor: «Abrir en WhatsApp» solo abre `wa.me` con el texto.
 
 ## Estructura
