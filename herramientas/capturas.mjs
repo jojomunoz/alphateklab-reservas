@@ -1,7 +1,7 @@
 // Capturas de cada vista (y de las pestañas de recepción) a 320, 360, 390 y 1280, en claro y oscuro (80 combinaciones), con el ancho del cuerpo (sin scroll
 // horizontal) y los errores de consola de cada una. Requiere el servidor en el puerto 4730 (o el de la variable PUERTO).
 // Uso: node herramientas/capturas.mjs [--completa]
-import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
+import { chromium } from './navegador.mjs';
 import { mkdirSync } from 'node:fs';
 
 const BASE = `http://localhost:${process.env.PUERTO || 4730}/alphateklab-reservas/`;

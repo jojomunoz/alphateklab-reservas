@@ -1,7 +1,7 @@
 // Abre una vista con Playwright, guarda una captura y lista los errores de consola y el ancho del cuerpo.
 // Uso: node herramientas/mirar.mjs <pagina> [ancho] [alto] [claro|oscuro] [nombre] [--completa] [--js "código"]
 // Requiere el servidor: python3 -m http.server 4730 -d ~/alphateklab/repos (o PUERTO=<otro>)
-import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
+import { chromium } from './navegador.mjs';
 import { mkdirSync } from 'node:fs';
 
 const args = process.argv.slice(2);

@@ -4,7 +4,7 @@
 // que muestra el resultado real: confirmada, horario ocupado, solicitud rechazada por una hora que ya pasó.
 // Requiere el servidor: python3 -m http.server 4730 -d ~/alphateklab/repos
 // Uso: node herramientas/relevo-simulado.mjs
-import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
+import { chromium } from './navegador.mjs';
 
 const BASE = `http://localhost:${process.env.PUERTO || 4730}/alphateklab-reservas/`;
 const resultados = [];

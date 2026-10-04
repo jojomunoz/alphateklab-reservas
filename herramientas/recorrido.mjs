@@ -2,7 +2,7 @@
 // y termina con un resumen de lo que pasó y lo que falló. Requiere el servidor en el puerto 4730 (o el de la variable PUERTO):
 //   python3 -m http.server 4730 -d ~/alphateklab/repos (o PUERTO=<otro>)
 // Uso: node herramientas/recorrido.mjs [--sin-relevo] [--sin-capturas]
-import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
+import { chromium } from './navegador.mjs';
 // El «otro dispositivo» es un segundo proceso de Chromium, con su propio perfil y sin almacenamiento compartido.
 // WebKit no arranca en esta máquina (Fedora: le faltan libicu74 y libjpeg-turbo8, que pide instalar con sudo).
 import { mkdirSync, readFileSync } from 'node:fs';

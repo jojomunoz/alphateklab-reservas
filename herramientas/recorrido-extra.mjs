@@ -3,7 +3,7 @@
 // desde recepción con validación, vocabulario de otra plantilla, reserva de grupo con solape rechazado y reserva
 // directa del huésped con ITBMS y depósito. Requiere el servidor en el puerto 4730 (o el de la variable PUERTO).
 // Uso: node herramientas/recorrido-extra.mjs
-import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
+import { chromium } from './navegador.mjs';
 import { mkdirSync } from 'node:fs';
 import { fechaISO, sumarDias, diaSemana } from '../js/nucleo/tiempo.mjs';
 import { feriado } from '../js/nucleo/feriados.mjs';

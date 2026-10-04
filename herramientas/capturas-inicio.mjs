@@ -1,7 +1,7 @@
 // Capturas reales para las dos tarjetas de la portada (assets/inicio/agenda-*.webp y cabanas-*.webp): la agenda de
 // recepción del día y la planilla de cabañas por canal, en tema claro, a 1280×800 y reducidas a 640 y 1280 px.
 // Uso: con el servidor en marcha, PUERTO=4900 node herramientas/capturas-inicio.mjs
-import { chromium } from '/home/jonathan/alphatend-do/sitio/node_modules/playwright/index.mjs';
+import { chromium } from './navegador.mjs';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

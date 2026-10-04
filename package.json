@@ -1,0 +1,13 @@
+{
+  "name": "alphateklab-reservas",
+  "private": true,
+  "description": "Demo de citas y reservas de cabañas. Ver README.",
+  "scripts": {
+    "prueba": "node --test pruebas/",
+    "recorrido": "node herramientas/recorrido.mjs",
+    "recorrido-extra": "node herramientas/recorrido-extra.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.61.1"
+  }
+}
